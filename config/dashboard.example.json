@@ -1,0 +1,33 @@
+{
+  "HOUSEHOLD_NAMES": "the household",
+  "SKIP_CATEGORIES": [
+    "Overspending",
+    "Rollover",
+    "Pending Transactions",
+    "Withdrawal's Pending",
+    "Residual Balance"
+  ],
+  "SKIP_INCOME": [
+    "Primary Income",
+    "Secondary Income",
+    "Other Income"
+  ],
+  "BUDGET_BUCKETS": {
+    "Fixed": ["Housing", "Debts", "Insurance & Financials", "Utilities", "Subscriptions", "Tax"],
+    "Flexible": ["Food", "Transportation", "Children", "Clothing", "Personal Care", "Medical/Health", "Pets"],
+    "Discretionary": ["Play & Fun", "Events", "Giving", "Misc"]
+  },
+  "BUSINESS_CATEGORIES": [],
+  "EXCLUDED_ACCOUNTS": [],
+  "NET_WORTH_GROUPS": {
+    "Cash & Checking": ["Primary Checking"],
+    "Savings": ["General Savings", "Long Term Savings", "Short Term Savings"],
+    "Retirement": ["Employer 401k", "Brokerage IRA"],
+    "Taxable Investments": ["Brokerage Taxable"],
+    "Education": ["College Fund"],
+    "Property": ["Primary Residence"],
+    "Debt — Mortgage": ["Mortgage"],
+    "Debt — Loans": ["Personal Loan"],
+    "Debt — Credit Cards": ["Credit Card"]
+  }
+}

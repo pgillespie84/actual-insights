@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Account {
+  id           String                   @id
+  name         String
+  type         String?
+  balance      Int                      @default(0)
+  transactions Transaction[]
+  snapshots    AccountBalanceSnapshot[]
+}
+
+model AccountBalanceSnapshot {
+  accountId String
+  date      DateTime @db.Date
+  balance   Int
+  account   Account  @relation(fields: [accountId], references: [id])
+
+  @@id([accountId, date])
+  @@index([accountId, date])
+}
+
+model Category {
+  id              String           @id
+  name            String
+  groupName       String?
+  hidden          Boolean          @default(false)
+  isIncome        Boolean          @default(false)
+  transactions    Transaction[]
+  categoryBudgets CategoryBudget[]
+}
+
+model Transaction {
+  id         String    @id
+  date       DateTime
+  amount     Int
+  payee      String?
+  notes      String?
+  categoryId String?
+  accountId  String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+  account    Account?  @relation(fields: [accountId], references: [id])
+
+  @@index([date])
+  @@index([categoryId])
+  @@index([accountId])
+}
+
+model CategoryBudget {
+  id             String   @id @default(cuid())
+  month          String
+  budgetedAmount Int
+  categoryId     String
+  category       Category @relation(fields: [categoryId], references: [id])
+
+  @@unique([categoryId, month])
+  @@index([month])
+}
+
+model SyncLog {
+  id          String   @id @default(cuid())
+  syncedAt    DateTime @default(now())
+  status      String
+  message     String?
+  recordCount Int?
+}
+
+model DailyInsight {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  content   String
+  monthKey  String
+
+  @@index([monthKey])
+}

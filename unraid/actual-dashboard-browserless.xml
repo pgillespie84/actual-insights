@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>actual-dashboard-browserless</Name>
+  <Repository>ghcr.io/browserless/chromium:latest</Repository>
+  <Registry>https://github.com/browserless/chromium</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>Headless Chromium used by Actual Dashboard to render PDF reports for email delivery.</Overview>
+  <Icon>https://raw.githubusercontent.com/browserless/chromium/main/assets/icon.png</Icon>
+
+  <Config Name="Token" Target="TOKEN" Default="" Mode="" Description="Shared secret token. Must match BROWSERLESS_TOKEN in actual-dashboard." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+</Container>
