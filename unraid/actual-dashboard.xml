@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>actual-dashboard</Name>
+  <Repository>ghcr.io/pgillespie84/actual-insights:latest</Repository>
+  <Registry>https://github.com/pgillespie84/actual-insights</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>Financial dashboard syncing data from Actual Budget into PostgreSQL, with AI-generated insights and PDF email reports.</Overview>
+  <Icon>https://raw.githubusercontent.com/pgillespie84/actual-insights/main/public/favicon.ico</Icon>
+
+  <Config Name="Web UI Port" Target="3000" Default="3100" Mode="tcp" Description="Port to access the dashboard." Type="Port" Display="always" Required="true" Mask="false">3100</Config>
+
+  <Config Name="Appdata Path" Target="/data" Default="/mnt/user/appdata/actual-dashboard" Mode="rw" Description="Host path where Actual Budget sync data is cached. Change the left side only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/actual-dashboard</Config>
+
+  <Config Name="Database URL" Target="DATABASE_URL" Default="postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard" Mode="" Description="PostgreSQL connection string. Use the actual-dashboard-db container name as the host." Type="Variable" Display="always" Required="true" Mask="false">postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard</Config>
+
+  <Config Name="Actual Budget Server URL" Target="ACTUAL_SERVER_URL" Default="" Mode="" Description="URL of your self-hosted Actual Budget server, e.g. http://YOUR-SERVER-IP:5006" Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Actual Budget Password" Target="ACTUAL_PASSWORD" Default="" Mode="" Description="Password for your Actual Budget server." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Actual Budget Sync ID" Target="ACTUAL_SYNC_ID" Default="" Mode="" Description="UUID of the budget file to sync." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+
+  <Config Name="Site Password" Target="SITE_PASSWORD" Default="" Mode="" Description="Password to log in to the dashboard." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+
+  <Config Name="Anthropic API Key" Target="ANTHROPIC_API_KEY" Default="" Mode="" Description="Optional. Enables AI-generated monthly insights." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+
+  <Config Name="Spotlight Categories" Target="SPOTLIGHT_CATEGORIES" Default="Grocery,Takeout,Subscriptions" Mode="" Description="Exactly 3 comma-separated category names to show as spotlight cards." Type="Variable" Display="always" Required="false" Mask="false">Grocery,Takeout,Subscriptions</Config>
+
+  <Config Name="Browserless URL" Target="BROWSERLESS_URL" Default="http://actual-dashboard-browserless:3000" Mode="" Description="Internal URL of the browserless container for PDF rendering." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-dashboard-browserless:3000</Config>
+  <Config Name="Browserless Token" Target="BROWSERLESS_TOKEN" Default="" Mode="" Description="Shared secret token for the browserless container. Must match the token set on actual-dashboard-browserless." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="PDF Render Base URL" Target="PDF_RENDER_BASE_URL" Default="http://actual-dashboard:3000" Mode="" Description="URL browserless uses to fetch the dashboard. Use the container name." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-dashboard:3000</Config>
+
+  <Config Name="Resend API Key" Target="RESEND_API_KEY" Default="" Mode="" Description="Optional. Resend API key for outbound email reports and sync alerts." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Email From" Target="EMAIL_FROM" Default="" Mode="" Description="Verified sender address, e.g. dashboard@yourdomain.com" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Email Recipients" Target="EMAIL_RECIPIENTS" Default="" Mode="" Description="Comma-separated list of recipient email addresses." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="Sync Cron" Target="SYNC_CRON" Default="" Mode="" Description="Cron expression for automatic syncs, e.g. '0 */6 * * *' for every 6 hours. Empty disables." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Email Cron" Target="EMAIL_CRON" Default="" Mode="" Description="Cron expression for monthly email report, e.g. '0 8 1 * *' for 1st of month at 8am. Empty disables." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Cron Timezone" Target="CRON_TIMEZONE" Default="America/New_York" Mode="" Description="Timezone for all cron schedules." Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+</Container>

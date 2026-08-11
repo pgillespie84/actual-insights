@@ -1,0 +1,80 @@
+services:
+  app:
+    build: .
+    container_name: actual-dashboard
+    restart: unless-stopped
+    ports:
+      - "3100:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/actual_dashboard
+      # Household config lives on the mounted volume, never in the image.
+      - DASHBOARD_CONFIG=${DASHBOARD_CONFIG:-/data/config.json}
+      - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL}
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD}
+      - ACTUAL_SYNC_ID=${ACTUAL_SYNC_ID}
+      - SITE_PASSWORD=${SITE_PASSWORD}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - BROWSERLESS_URL=${BROWSERLESS_URL:-http://browserless:3000}
+      - BROWSERLESS_TOKEN=${BROWSERLESS_TOKEN}
+      - PDF_RENDER_BASE_URL=${PDF_RENDER_BASE_URL:-http://app:3000}
+      - PDF_RENDER_AUTH_TOKEN=${PDF_RENDER_AUTH_TOKEN}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - EMAIL_RECIPIENTS=${EMAIL_RECIPIENTS}
+      - SYNC_CRON=${SYNC_CRON}
+      - EMAIL_CRON=${EMAIL_CRON}
+      - CRON_TIMEZONE=${CRON_TIMEZONE:-America/New_York}
+      - SPOTLIGHT_CATEGORIES=${SPOTLIGHT_CATEGORIES:-Grocery,Takeout,Subscriptions}
+    volumes:
+      # Change the path before the colon to wherever you want Actual Budget sync data stored on your host.
+      # On Unraid this is handled by the Appdata Path template field — leave as-is.
+      - /tmp/actual-sync-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+  browserless:
+    image: ghcr.io/browserless/chromium:latest
+    container_name: actual-dashboard-browserless
+    restart: unless-stopped
+    environment:
+      - TOKEN=${BROWSERLESS_TOKEN}
+
+  db:
+    image: postgres:16-alpine
+    container_name: actual-dashboard-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=actual_dashboard
+    volumes:
+      # Change the path before the colon to wherever you want Postgres data stored on your host.
+      # On Unraid this is typically /mnt/user/appdata/actual-dashboard/pgdata
+      # Leave the path after the colon (/var/lib/postgresql/data) as-is.
+      - /mnt/user/appdata/actual-dashboard/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  sync:
+    build: .
+    container_name: actual-dashboard-sync
+    restart: "no"
+    entrypoint: ["node", "scripts/sync.cjs"]
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/actual_dashboard
+      - DASHBOARD_CONFIG=${DASHBOARD_CONFIG:-/data/config.json}
+      - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL}
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD}
+      - ACTUAL_SYNC_ID=${ACTUAL_SYNC_ID}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - /tmp/actual-sync-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles:
+      - sync
