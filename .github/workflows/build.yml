@@ -1,11 +1,15 @@
 name: Build and Push Docker Image
 
-# Automatic builds are for main only. A branch build is available on demand
-# through workflow_dispatch, and is tagged with the branch name rather than
-# `latest`, so testing a build cannot repoint the tag Unraid pulls from.
+# Only main and workflow_dispatch publish an image. A pull request builds
+# without pushing, so a broken Dockerfile is caught before it reaches main
+# rather than after — the standalone copy layout and the native better-sqlite3
+# build have both broken here before, and neither shows up in the test suite.
+# A dispatched branch build is tagged with the branch name rather than `latest`,
+# so testing a build cannot repoint the tag Unraid pulls from.
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 
 env:
@@ -14,6 +18,13 @@ env:
 
 jobs:
   build:
+    # Pull requests from forks do not build. A PR build runs the Dockerfile out
+    # of the PR's own code, and this repo is public, so anyone can open one.
+    # GitHub already downgrades GITHUB_TOKEN to read-only for fork PRs, but not
+    # running arbitrary build steps at all is the simpler guarantee.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -23,7 +34,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Nothing to log in for on a pull request, which never pushes.
       - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -44,7 +57,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           no-cache: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
