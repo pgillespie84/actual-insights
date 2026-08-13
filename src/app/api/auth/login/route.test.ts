@@ -47,12 +47,12 @@ test("a wrong password is rejected", async () => {
 // does today, because it was previously described — in a commit message and a
 // QA report — as doing the opposite.
 //
-// clearLoginAttempts resets the global ceiling, but the route gates on
-// checkLoginAllowed *before* it verifies the password, so during an active
-// lockout the success path is never reached. A correct password is refused
-// like any other. The lockout is bounded rather than permanent: while gated the
-// route returns before recordLoginFailure, so the counter and window stop
-// growing and the window expires on its own.
+// clearLoginAttempts credits back part of the global ceiling, but the route
+// gates on checkLoginAllowed *before* it verifies the password, so during an
+// active lockout the success path is never reached. A correct password is
+// refused like any other. The lockout is short rather than permanent: while
+// gated the route returns before recordLoginFailure, so the counter stops
+// growing, and it drains back under the ceiling within 45 seconds.
 test("a correct password is still refused while the global ceiling is active", async () => {
   // 20 distinct keys, one failure each: no per-key lockout, ceiling reached.
   for (let i = 0; i < 20; i++) recordLoginFailure(`198.51.100.${i}`);

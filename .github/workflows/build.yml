@@ -1,5 +1,8 @@
 name: Build and Push Docker Image
 
+# Automatic builds are for main only. A branch build is available on demand
+# through workflow_dispatch, and is tagged with the branch name rather than
+# `latest`, so testing a build cannot repoint the tag Unraid pulls from.
 on:
   push:
     branches: [main]
@@ -34,7 +37,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha
-            type=raw,value=latest
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
         uses: docker/build-push-action@v5
