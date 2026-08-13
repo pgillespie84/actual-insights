@@ -12,6 +12,9 @@ beforeEach(() => {
 
 const IP = "192.0.2.10";
 
+/** Mirrors GLOBAL_MAX_FAILURES in loginRateLimit.ts. */
+const GLOBAL_MAX_FAILURES = 20;
+
 test("an unseen client is allowed", () => {
   expect(checkLoginAllowed(IP)).toEqual({ allowed: true, retryAfterSeconds: 0 });
 });
@@ -80,18 +83,35 @@ test("many distinct keys cannot exceed the global failure ceiling", () => {
   expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
 });
 
-// Unit-level: the counter is cleared, so failures do not accumulate across a
-// successful login. This deliberately calls clearLoginAttempts directly and so
-// proves nothing about the route — while the ceiling is active the route never
-// reaches this function at all. That ordering is pinned separately in
-// src/app/api/auth/login/route.test.ts.
-test("a successful login clears the global ceiling", () => {
+// A success used to zero the global counter outright, which handed an attacker
+// a fresh budget every time a household member signed in. It now forgives a
+// bounded amount instead, so a legitimate login relieves pressure without
+// refilling the whole budget.
+//
+// These call clearLoginAttempts directly and so prove nothing about the route —
+// while the ceiling is active the route never reaches this function at all.
+// That ordering is pinned separately in src/app/api/auth/login/route.test.ts.
+test("a successful login does not refill the whole global budget", () => {
   const now = Date.now();
   for (let i = 0; i < 50; i++) recordLoginFailure(`198.51.100.${i}`, now);
   expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
 
   clearLoginAttempts("203.0.113.77");
 
+  expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
+});
+
+// The point of forgiving anything at all: a household member's own typos, and
+// any failures that accumulated before they signed in, should not push a later
+// unrelated attempt over the ceiling.
+test("a successful login forgives some of the accumulated failures", () => {
+  const now = Date.now();
+  for (let i = 0; i < 19; i++) recordLoginFailure(`198.51.100.${i}`, now);
+
+  // One more failure would reach the ceiling.
+  clearLoginAttempts("203.0.113.77");
+
+  recordLoginFailure("198.51.100.200", now);
   expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(true);
 });
 
@@ -100,4 +120,60 @@ test("clients are tracked independently", () => {
 
   expect(checkLoginAllowed(IP).allowed).toBe(false);
   expect(checkLoginAllowed("192.0.2.99").allowed).toBe(true);
+});
+
+// The global counter used to sit at its ceiling until the whole 15-minute
+// window flipped, so tripping it locked the household out for up to 15 minutes
+// — and a correct password cannot relieve that, because the route gates before
+// it verifies. Draining the counter steadily makes the lockout self-clearing:
+// the budget is still 20 failures per 15 minutes, but it refills continuously
+// rather than all at once.
+test("the global counter drains over time", () => {
+  const now = Date.now();
+  for (let i = 0; i < 20; i++) recordLoginFailure(`198.51.100.${i}`, now);
+  expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
+
+  // 15 minutes / 20 failures = one failure forgiven every 45 seconds.
+  const later = now + 45 * 1000;
+  expect(checkLoginAllowed("203.0.113.77", later).allowed).toBe(true);
+});
+
+test("retryAfterSeconds reflects the drain, not the whole window", () => {
+  const now = Date.now();
+  for (let i = 0; i < 20; i++) recordLoginFailure(`198.51.100.${i}`, now);
+
+  const { retryAfterSeconds } = checkLoginAllowed("203.0.113.77", now);
+  expect(retryAfterSeconds).toBeGreaterThan(0);
+  expect(retryAfterSeconds).toBeLessThanOrEqual(45);
+});
+
+// The drain must not become a bypass. A draining counter is a token bucket: it
+// holds 20 guesses of burst and refills one every 45 seconds, so an attacker
+// who hammers the gate gets the burst once and is then held to the refill rate
+// forever after.
+//
+// Written as a simulation because the property that matters is the rate over
+// time. The first window is allowed the burst on top of the refill; what must
+// not drift upwards is the sustained rate, so that is measured separately.
+test("hammering the gate is held to the refill rate", () => {
+  const start = Date.now();
+  let firstWindow = 0;
+  let secondWindow = 0;
+
+  // One attempt per second for 30 minutes, each from a fresh key so no per-key
+  // lockout is doing the work.
+  for (let second = 0; second < 1800; second++) {
+    const at = start + second * 1000;
+    const key = `198.51.100.${second % 250}`;
+    if (checkLoginAllowed(key, at).allowed) {
+      if (second < 900) firstWindow++;
+      else secondWindow++;
+      recordLoginFailure(key, at);
+    }
+  }
+
+  // Burst plus refill.
+  expect(firstWindow).toBeLessThanOrEqual(GLOBAL_MAX_FAILURES * 2 + 1);
+  // Steady state: the refill rate alone.
+  expect(secondWindow).toBeLessThanOrEqual(GLOBAL_MAX_FAILURES + 1);
 });

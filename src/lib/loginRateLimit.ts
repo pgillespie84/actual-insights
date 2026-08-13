@@ -28,12 +28,36 @@ const MAX_TRACKED_KEYS = 10_000;
  * Ceiling on total failures across every key, which closes off the attack the
  * per-key counters cannot see: presenting many keys so each stays just under
  * its own limit while the total climbs without bound.
+ *
+ * The counter drains steadily rather than resetting when a window ends, so the
+ * budget is 20 failures per 15 minutes however they are spaced. Draining is
+ * what makes the ceiling safe to trip: the route gates before it verifies a
+ * password, so while the ceiling is active nobody can log in at all, and a
+ * counter that sat at its limit for the rest of a fixed window locked the
+ * household out for up to 15 minutes. Now it clears itself in 45 seconds.
  */
 const GLOBAL_MAX_FAILURES = 20;
 const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
 
+/** One failure is forgiven every 45 seconds. */
+const GLOBAL_DRAIN_MS = GLOBAL_WINDOW_MS / GLOBAL_MAX_FAILURES;
+
+/**
+ * How much of the global counter a successful login forgives. Sized to one
+ * client's own per-key allowance: enough to absorb a household member's typos,
+ * far short of the whole budget.
+ */
+const SUCCESS_CREDIT = MAX_ATTEMPTS;
+
 let globalFailures = 0;
-let globalWindowStart = 0;
+let globalUpdatedAt = 0;
+
+/** The global count as it stands at `now`, with elapsed time drained off it. */
+function drainedGlobalFailures(now: number): number {
+  if (globalFailures === 0) return 0;
+  const drained = (now - globalUpdatedAt) / GLOBAL_DRAIN_MS;
+  return Math.max(0, globalFailures - drained);
+}
 
 type Attempt = {
   failures: number;
@@ -61,15 +85,15 @@ export function checkLoginAllowed(
   key: string,
   now: number = Date.now(),
 ): { allowed: boolean; retryAfterSeconds: number } {
-  if (
-    globalFailures >= GLOBAL_MAX_FAILURES &&
-    now - globalWindowStart <= GLOBAL_WINDOW_MS
-  ) {
+  const global = drainedGlobalFailures(now);
+  if (global >= GLOBAL_MAX_FAILURES) {
+    // Time for the count to drain back under the ceiling, capped at the window
+    // so the Retry-After hint can never exceed it.
+    const excess = global - (GLOBAL_MAX_FAILURES - 1);
+    const waitMs = Math.min(excess * GLOBAL_DRAIN_MS, GLOBAL_WINDOW_MS);
     return {
       allowed: false,
-      retryAfterSeconds: Math.ceil(
-        (globalWindowStart + GLOBAL_WINDOW_MS - now) / 1000,
-      ),
+      retryAfterSeconds: Math.max(1, Math.ceil(waitMs / 1000)),
     };
   }
 
@@ -92,11 +116,8 @@ export function recordLoginFailure(
 ): { failures: number; lockedUntil: number } {
   if (attempts.size > MAX_TRACKED_KEYS) prune(now);
 
-  if (now - globalWindowStart > GLOBAL_WINDOW_MS) {
-    globalWindowStart = now;
-    globalFailures = 0;
-  }
-  globalFailures += 1;
+  globalFailures = drainedGlobalFailures(now) + 1;
+  globalUpdatedAt = now;
 
   const previous = attempts.get(key);
 
@@ -118,29 +139,31 @@ export function recordLoginFailure(
 /**
  * Called after a successful login.
  *
- * Clears the global ceiling as well as the key's own record, so failures do not
- * accumulate across a successful login and push a later, unrelated attempt over
- * the limit. Reaching this function requires knowing the password, so an
- * attacker cannot use it to reset their own attempts.
+ * Clears the key's own record, and forgives a bounded slice of the global
+ * counter rather than zeroing it. Zeroing meant every household sign-in handed
+ * a patient attacker a fresh budget of guesses. The credit is enough to absorb
+ * one person's typos and any failures that piled up before they signed in,
+ * which is all it was ever needed for. Reaching this function requires knowing
+ * the password, so an attacker cannot use it to reset their own attempts.
  *
  * Note what this does NOT do. The route gates on checkLoginAllowed before it
  * verifies the password, so once the ceiling is active this function is
  * unreachable and a correct password is refused like any other — see the
  * characterisation test in src/app/api/auth/login/route.test.ts. That is the
  * control working as intended: checking the password while locked out would let
- * an attacker keep guessing at full rate. The lockout is bounded, not
- * permanent, because a gated request returns before recordLoginFailure, so the
- * counter and window stop growing and the window expires on its own.
+ * an attacker keep guessing at full rate. The lockout is short rather than
+ * permanent: a gated request returns before recordLoginFailure, so the counter
+ * stops growing, and the drain puts it back under the ceiling in 45 seconds.
  */
-export function clearLoginAttempts(key: string): void {
+export function clearLoginAttempts(key: string, now: number = Date.now()): void {
   attempts.delete(key);
-  globalFailures = 0;
-  globalWindowStart = 0;
+  globalFailures = Math.max(0, drainedGlobalFailures(now) - SUCCESS_CREDIT);
+  globalUpdatedAt = now;
 }
 
 /** Test seam. Not used by application code. */
 export function resetLoginRateLimit(): void {
   attempts.clear();
   globalFailures = 0;
-  globalWindowStart = 0;
+  globalUpdatedAt = 0;
 }
