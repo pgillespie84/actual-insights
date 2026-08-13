@@ -5,9 +5,17 @@ import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
 import { startOfMonth, endOfMonth, format, subMonths } from "date-fns";
 import { getCurrentMonthKeyET, getCurrentDayET } from "./timezone";
-import { generateMonthRange, expenseCategoryFilter } from "./query-utils";
+import { generateMonthRange, expenseCategoryFilter, mapWithConcurrency, MONTH_QUERY_CONCURRENCY, type MonthEntry } from "./query-utils";
 
 const catFilter = expenseCategoryFilter();
+
+/** One month loop, with a bounded number of months in flight. */
+function mapMonths<T>(
+  range: MonthEntry[],
+  fn: (entry: MonthEntry) => Promise<T>,
+): Promise<T[]> {
+  return mapWithConcurrency(range, MONTH_QUERY_CONCURRENCY, fn);
+}
 
 export async function getCurrentMonthSummary(monthDate: Date) {
   const { start, end, monthKey } = generateMonthRange(1, monthDate)[0];
@@ -62,8 +70,9 @@ export async function getCurrentMonthSummary(monthDate: Date) {
 
 export async function getMonthlySpendingTrend(months: number = 12) {
   const range = generateMonthRange(months);
-  return Promise.all(
-    range.map(async ({ monthKey, start, end }) => {
+  return mapMonths(
+    range,
+    async ({ monthKey, start, end }) => {
       const [spendingResult, budgetResult] = await Promise.all([
         prisma.transaction.aggregate({
           where: {
@@ -87,14 +96,15 @@ export async function getMonthlySpendingTrend(months: number = 12) {
         spent: Math.abs(spendingResult._sum.amount || 0),
         budgeted: budgetResult._sum.budgetedAmount || 0,
       };
-    }),
+    },
   );
 }
 
 export async function getCategoryTrend(categoryId: string, months: number = 12) {
   const range = generateMonthRange(months);
-  return Promise.all(
-    range.map(async ({ monthKey, start, end }) => {
+  return mapMonths(
+    range,
+    async ({ monthKey, start, end }) => {
       const [spendingResult, budgetResult] = await Promise.all([
         prisma.transaction.aggregate({
           where: {
@@ -114,7 +124,7 @@ export async function getCategoryTrend(categoryId: string, months: number = 12) 
         spent: Math.abs(spendingResult._sum.amount || 0),
         budgeted: budgetResult?.budgetedAmount || 0,
       };
-    }),
+    },
   );
 }
 
@@ -237,8 +247,9 @@ export async function getSavingsRate(monthDate: Date) {
 
 export async function getSavingsRateTrend(months: number = 12) {
   const range = generateMonthRange(months);
-  return Promise.all(
-    range.map(async ({ monthDate, monthKey }) => {
+  return mapMonths(
+    range,
+    async ({ monthDate, monthKey }) => {
       const { income, spending, savingsRate } = await getSavingsRate(monthDate);
 
       return {
@@ -248,7 +259,7 @@ export async function getSavingsRateTrend(months: number = 12) {
         spending,
         savingsRate,
       };
-    }),
+    },
   );
 }
 
@@ -304,8 +315,9 @@ export async function getBudgetAccuracy(monthDate: Date) {
 
 export async function getCashFlowForecast(months: number = 6) {
   const range = generateMonthRange(months);
-  const historical = await Promise.all(
-    range.map(async ({ monthKey, start, end }) => {
+  const historical = await mapMonths(
+    range,
+    async ({ monthKey, start, end }) => {
       const spendingResult = await prisma.transaction.aggregate({
         where: {
           date: { gte: start, lte: end },
@@ -320,7 +332,7 @@ export async function getCashFlowForecast(months: number = 6) {
         spent: Math.abs(spendingResult._sum.amount || 0),
         projected: false,
       };
-    }),
+    },
   );
 
   const avgSpent = historical.reduce((sum, h) => sum + h.spent, 0) / historical.length;
@@ -464,8 +476,9 @@ export async function getDailySpending(monthDate: Date) {
 
 export async function getCashFlowTrends(months: number = 4) {
   const range = generateMonthRange(months);
-  return Promise.all(
-    range.map(async ({ monthKey, start, end }) => {
+  return mapMonths(
+    range,
+    async ({ monthKey, start, end }) => {
       const [incomeResult, expenseResult] = await Promise.all([
         prisma.transaction.aggregate({
           where: {
@@ -489,7 +502,7 @@ export async function getCashFlowTrends(months: number = 4) {
         income: Math.abs(incomeResult._sum.amount || 0),
         expenses: Math.abs(expenseResult._sum.amount || 0),
       };
-    }),
+    },
   );
 }
 
