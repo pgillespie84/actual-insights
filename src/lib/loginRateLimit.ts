@@ -87,8 +87,11 @@ export function checkLoginAllowed(
 ): { allowed: boolean; retryAfterSeconds: number } {
   const global = drainedGlobalFailures(now);
   if (global >= GLOBAL_MAX_FAILURES) {
-    // Time for the count to drain back under the ceiling, capped at the window
-    // so the Retry-After hint can never exceed it.
+    // Time to drain a whole failure off the count, capped at the window so the
+    // Retry-After hint can never exceed it. Rounding up to the next full slot
+    // overstates the wait a little — the gate reopens as soon as the count is
+    // fractionally under the ceiling — but a client that honours the hint then
+    // always succeeds instead of retrying into another 429.
     const excess = global - (GLOBAL_MAX_FAILURES - 1);
     const waitMs = Math.min(excess * GLOBAL_DRAIN_MS, GLOBAL_WINDOW_MS);
     return {
