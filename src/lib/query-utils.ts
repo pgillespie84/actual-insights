@@ -1,4 +1,4 @@
-import { subMonths, startOfMonth, endOfMonth, format } from "date-fns";
+import { subMonths, startOfMonth, endOfMonth, format, parse } from "date-fns";
 import { SKIP_CATEGORIES, SKIP_INCOME } from "./constants";
 
 export interface MonthEntry {
@@ -21,6 +21,29 @@ export function generateMonthRange(count: number, anchor?: Date): MonthEntry[] {
     entries.push({ monthDate, monthKey, label, start, end });
   }
   return entries;
+}
+
+/**
+ * Resolves which month an API request is asking for.
+ *
+ * `currentMonthKey` is passed in rather than read here so the resolution stays
+ * a pure function. Callers supply `getCurrentMonthKeyET()`.
+ *
+ * When no month is requested, the current month is used if there is data for
+ * it, and otherwise the newest month that has data — early in a month, before
+ * a sync has run, the current month is empty.
+ */
+export function resolveMonth(
+  requested: string | null | undefined,
+  availableMonths: string[],
+  currentMonthKey: string,
+): { monthKey: string; monthDate: Date } {
+  const defaultMonth = availableMonths.includes(currentMonthKey)
+    ? currentMonthKey
+    : availableMonths[0];
+
+  const monthKey = requested || defaultMonth;
+  return { monthKey, monthDate: parse(monthKey, "yyyy-MM", new Date()) };
 }
 
 export function expenseCategoryFilter(): {

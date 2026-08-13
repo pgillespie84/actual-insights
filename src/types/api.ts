@@ -1,165 +1,101 @@
-// Shared sub-types
+/**
+ * Response shapes for the dashboard API routes.
+ *
+ * These are derived from the query functions rather than written out by hand.
+ * The previous version restated every field, which meant a change to a query's
+ * return shape left the client types silently stale until something broke at
+ * runtime. Deriving them makes that a compile error instead.
+ *
+ * Each type mirrors exactly what its route passes to `NextResponse.json`.
+ */
 
-export interface PayeeEntry {
-  payee: string;
-  amount: number;
-}
+import type {
+  getAvailableMonths,
+  getBudgetAccuracy,
+  getBudgetByBucket,
+  getCashFlowForecast,
+  getCashFlowTrends,
+  getCategorySpotlight,
+  getCategoryTrend,
+  getChronicOverspenders,
+  getCurrentMonthSummary,
+  getDailySpending,
+  getDebtMetric,
+  getInvestmentsMetric,
+  getLastSync,
+  getLatestInsight,
+  getMonthlySpendingTrend,
+  getNetWorth,
+  getSavingsMetric,
+  getSavingsRateTrend,
+  getTopExpenseCategories,
+  getTopPayees,
+  getTrendCategories,
+} from "@/lib/queries";
 
-export interface SavingsRatePoint {
-  month: string;
-  label: string;
-  income: number;
-  spending: number;
-  savingsRate: number;
-}
+/**
+ * What a value becomes once it has been through `NextResponse.json`.
+ *
+ * Deriving straight from a query's return type would be wrong: the client
+ * never sees a `Date`, it sees the ISO string `JSON.stringify` produced. This
+ * is what the hand-written types got right and a naive derivation gets wrong.
+ */
+type Serialized<T> = T extends Date
+  ? string
+  : T extends readonly (infer U)[]
+    ? Serialized<U>[]
+    : T extends object
+      ? { [K in keyof T]: Serialized<T[K]> }
+      : T;
 
-export interface TrendPoint {
-  month: string;
-  label: string;
-  spent: number;
-  budgeted: number;
-}
+/** A query function's return type as the client receives it. */
+type Returns<T extends (...args: never[]) => unknown> = Serialized<
+  Awaited<ReturnType<T>>
+>;
 
-export interface CategoryOption {
-  id: string;
-  name: string;
-  groupName: string | null;
-}
+/** One entry of an array-returning query. */
+type Element<T> = T extends readonly (infer U)[] ? U : never;
 
-export interface AccuracyCategory {
-  id: string;
-  name: string;
-  groupName: string | null;
-  budgeted: number;
-  spent: number;
-  deviation: number;
-  accurate: boolean;
-}
-
-// Dashboard
+export type PayeeEntry = Element<Returns<typeof getTopPayees>>;
+export type SavingsRatePoint = Element<Returns<typeof getSavingsRateTrend>>;
+export type TrendPoint = Element<Returns<typeof getCategoryTrend>>;
+export type CategoryOption = Element<Returns<typeof getTrendCategories>>;
+export type AccuracyCategory = Element<Returns<typeof getBudgetAccuracy>>;
 
 export interface DashboardResponse {
   monthKey: string;
-  dailySpending: {
-    currentMonth: Array<{ day: number; cumulative: number }>;
-    previousMonth: Array<{ day: number; cumulative: number }>;
-    currentLabel: string;
-    previousLabel: string;
-  };
-  topPayees: PayeeEntry[];
-  cashFlowTrends: Array<{
-    month: string;
-    label: string;
-    income: number;
-    expenses: number;
-  }>;
-  topExpenseCategories: Array<{ name: string; amount: number }>;
-  categorySpotlights: Array<{
-    name: string;
-    budgeted: number;
-    spent: number;
-    remaining: number;
-    percentUsed: number;
-  }>;
-  savingsMetric: { monthDelta: number; ytdDelta: number };
-  debtMetric: { monthDelta: number; ytdDelta: number };
-  investmentsMetric: {
-    monthDelta: number;
-    ytdDelta: number;
-    contributions: number;
-    growth: number;
-    trackingSince: string | null;
-  };
-  lastSync: { syncedAt: string; status: string } | null;
-  availableMonths: string[];
-  insight: { content: string; createdAt: string } | null;
+  dailySpending: Returns<typeof getDailySpending>;
+  topPayees: Returns<typeof getTopPayees>;
+  lastSync: Returns<typeof getLastSync>;
+  availableMonths: Returns<typeof getAvailableMonths>;
+  insight: Returns<typeof getLatestInsight>;
+  cashFlowTrends: Returns<typeof getCashFlowTrends>;
+  topExpenseCategories: Returns<typeof getTopExpenseCategories>;
+  categorySpotlights: Returns<typeof getCategorySpotlight>;
+  savingsMetric: Returns<typeof getSavingsMetric>;
+  debtMetric: Returns<typeof getDebtMetric>;
+  investmentsMetric: Returns<typeof getInvestmentsMetric>;
 }
-
-// Budget
 
 export interface BudgetResponse {
-  summary: {
-    monthKey: string;
-    totalBudgeted: number;
-    totalSpent: number;
-    totalRemaining: number;
-    percentUsed: number;
-    categories: Array<{
-      id: string;
-      name: string;
-      groupName: string | null;
-      budgeted: number;
-      spent: number;
-      remaining: number;
-      percentUsed: number;
-    }>;
-  };
-  buckets: Array<{
-    name: string;
-    totalBudgeted: number;
-    totalSpent: number;
-    remaining: number;
-    percentUsed: number;
-    groups: Array<{
-      name: string;
-      budgeted: number;
-      spent: number;
-      categories: Array<{
-        name: string;
-        budgeted: number;
-        spent: number;
-        isBusiness: boolean;
-      }>;
-    }>;
-  }>;
-  netWorth: {
-    totalNetWorth: number;
-    totalAssets: number;
-    totalDebt: number;
-    groups: Array<{
-      name: string;
-      total: number;
-      accounts: Array<{ name: string; balance: number }>;
-      isDebt: boolean;
-    }>;
-  };
-  availableMonths: string[];
+  summary: Returns<typeof getCurrentMonthSummary>;
+  buckets: Returns<typeof getBudgetByBucket>;
+  netWorth: Returns<typeof getNetWorth>;
+  availableMonths: Returns<typeof getAvailableMonths>;
 }
 
-// Analytics
-
 export interface AnalyticsResponse {
-  budgetAccuracy: {
-    accurateCount: number;
-    totalCount: number;
-    accuracyPercent: number;
-    categories: AccuracyCategory[];
-  };
-  topPayees: PayeeEntry[];
-  savingsRateTrend: SavingsRatePoint[];
-  cashFlowForecast: Array<{
-    month: string;
-    label: string;
-    spent: number;
-    projected: boolean;
-  }>;
-  availableMonths: string[];
+  budgetAccuracy: Returns<typeof getBudgetAccuracy>;
+  topPayees: Returns<typeof getTopPayees>;
+  savingsRateTrend: Returns<typeof getSavingsRateTrend>;
+  cashFlowForecast: Returns<typeof getCashFlowForecast>;
+  availableMonths: Returns<typeof getAvailableMonths>;
   monthKey: string;
 }
 
-// Trends
-
 export interface TrendsResponse {
-  trend: TrendPoint[];
-  chronicOverspenders: Array<{
-    id: string;
-    name: string;
-    groupName: string | null;
-    overMonths: number;
-    totalOver: number;
-    totalMonths: number;
-    frequency: string;
-  }>;
-  categories: CategoryOption[];
-  savingsRateTrend: SavingsRatePoint[];
+  trend: Returns<typeof getMonthlySpendingTrend>;
+  chronicOverspenders: Returns<typeof getChronicOverspenders>;
+  categories: Returns<typeof getTrendCategories>;
+  savingsRateTrend: Returns<typeof getSavingsRateTrend>;
 }

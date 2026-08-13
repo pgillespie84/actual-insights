@@ -5,15 +5,10 @@ import {
   clearLoginAttempts,
   recordLoginFailure,
 } from "@/lib/loginRateLimit";
-
-function clientKey(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) return forwarded.split(",")[0]!.trim();
-  return request.headers.get("x-real-ip") ?? "unknown";
-}
+import { clientKey } from "@/lib/clientKey";
 
 export async function POST(request: NextRequest) {
-  const key = clientKey(request);
+  const key = clientKey(request.headers);
 
   const gate = checkLoginAllowed(key);
   if (!gate.allowed) {

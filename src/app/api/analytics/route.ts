@@ -6,8 +6,8 @@ import {
   getCashFlowForecast,
   getAvailableMonths,
 } from "@/lib/queries";
-import { parse } from "date-fns";
 import { getCurrentMonthKeyET } from "@/lib/timezone";
+import { resolveMonth } from "@/lib/query-utils";
 import { hasReadAccess } from "@/lib/auth";
 
 export async function GET(request: NextRequest) {
@@ -19,12 +19,11 @@ export async function GET(request: NextRequest) {
   const monthParam = searchParams.get("month");
 
   const availableMonths = await getAvailableMonths();
-  const currentET = getCurrentMonthKeyET();
-  const defaultMonth = availableMonths.includes(currentET)
-    ? currentET
-    : availableMonths[0];
-  const monthKey = monthParam || defaultMonth;
-  const monthDate = parse(monthKey, "yyyy-MM", new Date());
+  const { monthKey, monthDate } = resolveMonth(
+    monthParam,
+    availableMonths,
+    getCurrentMonthKeyET(),
+  );
 
   const [budgetAccuracy, topPayees, savingsRateTrend, cashFlowForecast] =
     await Promise.all([

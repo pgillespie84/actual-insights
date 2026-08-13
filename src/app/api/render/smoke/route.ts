@@ -8,7 +8,7 @@ export async function GET() {
   }
 
   try {
-    const pdf = await renderRoute("/", { format: "pdf" });
+    const pdf = await renderRoute("/", {});
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,
       headers: {

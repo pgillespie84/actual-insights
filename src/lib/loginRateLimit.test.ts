@@ -69,6 +69,17 @@ test("a successful login clears the record", () => {
   expect(checkLoginAllowed(IP).allowed).toBe(true);
 });
 
+// Per-key counters alone are defeated by anyone who can present many keys: each
+// key stays one failure below its own limit while the total climbs without
+// bound. A ceiling on total failures closes that off no matter how the keys are
+// spread. Every key here fails only once, so no per-key lockout is in play.
+test("many distinct keys cannot exceed the global failure ceiling", () => {
+  const now = Date.now();
+  for (let i = 0; i < 50; i++) recordLoginFailure(`198.51.100.${i}`, now);
+
+  expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
+});
+
 test("clients are tracked independently", () => {
   for (let i = 0; i < 5; i++) recordLoginFailure(IP);
 

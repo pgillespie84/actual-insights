@@ -1,23 +1,13 @@
-function etParts() {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(now);
-  return {
-    year: parts.find((p) => p.type === "year")!.value,
-    month: parts.find((p) => p.type === "month")!.value,
-    day: parts.find((p) => p.type === "day")!.value,
-  };
-}
+/**
+ * Typed re-export of the shared Eastern-Time helpers.
+ *
+ * The implementation lives in `timezone.cjs` so the CJS scripts can require the
+ * same code; see the note there.
+ */
 
-export function getCurrentMonthKeyET(): string {
-  const { year, month } = etParts();
-  return `${year}-${month}`;
-}
-
-export function getCurrentDayET(): number {
-  return Number(etParts().day);
-}
+export {
+  getCurrentMonthKeyET,
+  getCurrentDayET,
+  getDaysInMonth,
+  getPreviousMonthKey,
+} from "./timezone.cjs";

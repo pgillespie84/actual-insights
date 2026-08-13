@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { SpendingTrendChart } from "@/components/SpendingTrendChart";
 import { CategoryTrendChart } from "@/components/CategoryTrendChart";
 import { ChronicOverspenders } from "@/components/ChronicOverspenders";
@@ -17,16 +17,23 @@ export default function TrendsPage() {
   const [categoryTrend, setCategoryTrend] = useState<TrendPoint[] | null>(null);
   const [categoryLoading, setCategoryLoading] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    const res = await fetch("/api/trends");
-    const json = await res.json();
-    setData(json);
-    setLoading(false);
-  }, []);
-
+  // The cancelled flag matters as well as the lint rule: without it a response
+  // arriving after the page unmounts sets state on a dead component.
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let cancelled = false;
+
+    (async () => {
+      const res = await fetch("/api/trends");
+      const json = await res.json();
+      if (cancelled) return;
+      setData(json);
+      setLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleCategorySelect(id: string, name: string) {
     setSelectedCategory({ id, name });

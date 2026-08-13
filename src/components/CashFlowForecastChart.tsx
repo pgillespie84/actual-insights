@@ -8,7 +8,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  ReferenceLine,
 } from "recharts";
 import { formatCents } from "@/lib/format";
 

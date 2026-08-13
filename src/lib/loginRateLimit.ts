@@ -24,6 +24,17 @@ const MAX_LOCKOUT_MS = 15 * 60 * 1000;
 /** Prune threshold, so a burst of unique IPs cannot grow the map without end. */
 const MAX_TRACKED_KEYS = 10_000;
 
+/**
+ * Ceiling on total failures across every key, which closes off the attack the
+ * per-key counters cannot see: presenting many keys so each stays just under
+ * its own limit while the total climbs without bound.
+ */
+const GLOBAL_MAX_FAILURES = 20;
+const GLOBAL_WINDOW_MS = 15 * 60 * 1000;
+
+let globalFailures = 0;
+let globalWindowStart = 0;
+
 type Attempt = {
   failures: number;
   lastFailureAt: number;
@@ -50,6 +61,18 @@ export function checkLoginAllowed(
   key: string,
   now: number = Date.now(),
 ): { allowed: boolean; retryAfterSeconds: number } {
+  if (
+    globalFailures >= GLOBAL_MAX_FAILURES &&
+    now - globalWindowStart <= GLOBAL_WINDOW_MS
+  ) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.ceil(
+        (globalWindowStart + GLOBAL_WINDOW_MS - now) / 1000,
+      ),
+    };
+  }
+
   const entry = attempts.get(key);
   if (!entry) return { allowed: true, retryAfterSeconds: 0 };
 
@@ -68,6 +91,12 @@ export function recordLoginFailure(
   now: number = Date.now(),
 ): { failures: number; lockedUntil: number } {
   if (attempts.size > MAX_TRACKED_KEYS) prune(now);
+
+  if (now - globalWindowStart > GLOBAL_WINDOW_MS) {
+    globalWindowStart = now;
+    globalFailures = 0;
+  }
+  globalFailures += 1;
 
   const previous = attempts.get(key);
 
@@ -93,4 +122,6 @@ export function clearLoginAttempts(key: string): void {
 /** Test seam. Not used by application code. */
 export function resetLoginRateLimit(): void {
   attempts.clear();
+  globalFailures = 0;
+  globalWindowStart = 0;
 }

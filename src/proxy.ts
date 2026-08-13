@@ -18,18 +18,15 @@ import {
 const RENDER_TOKEN_HEADER = "x-render-token";
 
 /**
- * The only paths the headless renderer may reach: the dashboard page and the
- * read-only data routes that page fetches while rendering. It previously
- * received a full session cookie on any path, so a leaked render token was
- * equivalent to the site password.
+ * The only paths the headless renderer may reach: the dashboard page, and the
+ * one data route that page fetches while rendering. It previously received a
+ * full session cookie on any path, so a leaked render token was equivalent to
+ * the site password.
+ *
+ * Widen this deliberately, with a test, if a budget or analytics PDF is ever
+ * added — not in advance.
  */
-const RENDER_ALLOWED_PATHS = new Set([
-  "/",
-  "/api/dashboard",
-  "/api/budget",
-  "/api/analytics",
-  "/api/trends",
-]);
+const RENDER_ALLOWED_PATHS = new Set(["/", "/api/dashboard"]);
 
 function toLogin(request: NextRequest): NextResponse {
   return NextResponse.redirect(new URL("/login", request.url));

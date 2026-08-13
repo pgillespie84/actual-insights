@@ -1,4 +1,4 @@
-import { test, expect, vi, beforeEach } from "vitest";
+import { test, expect, vi } from "vitest";
 import { withRetry } from "./mailer";
 
 test("withRetry returns result on first success", async () => {
