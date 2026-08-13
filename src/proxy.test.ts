@@ -75,6 +75,18 @@ test("render token does not unlock routes that act on the account", async () => 
   }
 });
 
+// Least privilege: only / and /api/dashboard are ever rendered, so the render
+// token has no business reaching the other data routes.
+test("render token does not unlock data routes the renderer never fetches", async () => {
+  const { proxy } = await import("./proxy.ts");
+  const { render } = await tokens();
+
+  for (const path of ["/api/budget", "/api/analytics", "/api/trends"]) {
+    expect(redirectedToLogin(proxy(buildRequest(`${path}?token=render-secret-123`))), path).toBe(true);
+    expect(redirectedToLogin(proxy(buildRequest(path, { cookies: { render_token: render } }))), path).toBe(true);
+  }
+});
+
 test("render cookie allows the data routes the rendered page fetches", async () => {
   const { proxy } = await import("./proxy.ts");
   const { render } = await tokens();

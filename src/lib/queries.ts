@@ -60,89 +60,62 @@ export async function getCurrentMonthSummary(monthDate: Date) {
   };
 }
 
-export async function getCategoryGroupSummary(monthDate: Date) {
-  const summary = await getCurrentMonthSummary(monthDate);
-
-  const groups = new Map<string, { budgeted: number; spent: number }>();
-  for (const cat of summary.categories) {
-    const group = cat.groupName || "Uncategorized";
-    const existing = groups.get(group) || { budgeted: 0, spent: 0 };
-    existing.budgeted += cat.budgeted;
-    existing.spent += cat.spent;
-    groups.set(group, existing);
-  }
-
-  return Array.from(groups.entries())
-    .map(([name, data]) => ({
-      name,
-      budgeted: data.budgeted,
-      spent: data.spent,
-      remaining: data.budgeted - data.spent,
-      percentUsed: data.budgeted > 0 ? (data.spent / data.budgeted) * 100 : 0,
-    }))
-    .sort((a, b) => b.spent - a.spent);
-}
-
 export async function getMonthlySpendingTrend(months: number = 12) {
   const range = generateMonthRange(months);
-  const results = [];
+  return Promise.all(
+    range.map(async ({ monthKey, start, end }) => {
+      const [spendingResult, budgetResult] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: {
+            date: { gte: start, lte: end },
+            category: catFilter,
+          },
+          _sum: { amount: true },
+        }),
+        prisma.categoryBudget.aggregate({
+          where: {
+            month: monthKey,
+            category: catFilter,
+          },
+          _sum: { budgetedAmount: true },
+        }),
+      ]);
 
-  for (const { monthKey, start, end } of range) {
-    const [spendingResult, budgetResult] = await Promise.all([
-      prisma.transaction.aggregate({
-        where: {
-          date: { gte: start, lte: end },
-          category: catFilter,
-        },
-        _sum: { amount: true },
-      }),
-      prisma.categoryBudget.aggregate({
-        where: {
-          month: monthKey,
-          category: catFilter,
-        },
-        _sum: { budgetedAmount: true },
-      }),
-    ]);
-
-    results.push({
-      month: monthKey,
-      label: format(start, "MMM yyyy"),
-      spent: Math.abs(spendingResult._sum.amount || 0),
-      budgeted: budgetResult._sum.budgetedAmount || 0,
-    });
-  }
-
-  return results;
+      return {
+        month: monthKey,
+        label: format(start, "MMM yyyy"),
+        spent: Math.abs(spendingResult._sum.amount || 0),
+        budgeted: budgetResult._sum.budgetedAmount || 0,
+      };
+    }),
+  );
 }
 
 export async function getCategoryTrend(categoryId: string, months: number = 12) {
   const range = generateMonthRange(months);
-  const results = [];
+  return Promise.all(
+    range.map(async ({ monthKey, start, end }) => {
+      const [spendingResult, budgetResult] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: {
+            date: { gte: start, lte: end },
+            categoryId,
+          },
+          _sum: { amount: true },
+        }),
+        prisma.categoryBudget.findUnique({
+          where: { categoryId_month: { categoryId, month: monthKey } },
+        }),
+      ]);
 
-  for (const { monthKey, start, end } of range) {
-    const [spendingResult, budgetResult] = await Promise.all([
-      prisma.transaction.aggregate({
-        where: {
-          date: { gte: start, lte: end },
-          categoryId,
-        },
-        _sum: { amount: true },
-      }),
-      prisma.categoryBudget.findUnique({
-        where: { categoryId_month: { categoryId, month: monthKey } },
-      }),
-    ]);
-
-    results.push({
-      month: monthKey,
-      label: format(start, "MMM yyyy"),
-      spent: Math.abs(spendingResult._sum.amount || 0),
-      budgeted: budgetResult?.budgetedAmount || 0,
-    });
-  }
-
-  return results;
+      return {
+        month: monthKey,
+        label: format(start, "MMM yyyy"),
+        spent: Math.abs(spendingResult._sum.amount || 0),
+        budgeted: budgetResult?.budgetedAmount || 0,
+      };
+    }),
+  );
 }
 
 export async function getChronicOverspenders(months: number = 6) {
@@ -264,21 +237,19 @@ export async function getSavingsRate(monthDate: Date) {
 
 export async function getSavingsRateTrend(months: number = 12) {
   const range = generateMonthRange(months);
-  const results = [];
+  return Promise.all(
+    range.map(async ({ monthDate, monthKey }) => {
+      const { income, spending, savingsRate } = await getSavingsRate(monthDate);
 
-  for (const { monthDate, monthKey } of range) {
-    const { income, spending, savingsRate } = await getSavingsRate(monthDate);
-
-    results.push({
-      month: monthKey,
-      label: format(monthDate, "MMM yyyy"),
-      income,
-      spending,
-      savingsRate,
-    });
-  }
-
-  return results;
+      return {
+        month: monthKey,
+        label: format(monthDate, "MMM yyyy"),
+        income,
+        spending,
+        savingsRate,
+      };
+    }),
+  );
 }
 
 export async function getTopPayees(monthDate: Date, limit: number = 15) {
@@ -333,24 +304,24 @@ export async function getBudgetAccuracy(monthDate: Date) {
 
 export async function getCashFlowForecast(months: number = 6) {
   const range = generateMonthRange(months);
-  const historical = [];
+  const historical = await Promise.all(
+    range.map(async ({ monthKey, start, end }) => {
+      const spendingResult = await prisma.transaction.aggregate({
+        where: {
+          date: { gte: start, lte: end },
+          category: catFilter,
+        },
+        _sum: { amount: true },
+      });
 
-  for (const { monthKey, start, end } of range) {
-    const spendingResult = await prisma.transaction.aggregate({
-      where: {
-        date: { gte: start, lte: end },
-        category: catFilter,
-      },
-      _sum: { amount: true },
-    });
-
-    historical.push({
-      month: monthKey,
-      label: format(start, "MMM yyyy"),
-      spent: Math.abs(spendingResult._sum.amount || 0),
-      projected: false,
-    });
-  }
+      return {
+        month: monthKey,
+        label: format(start, "MMM yyyy"),
+        spent: Math.abs(spendingResult._sum.amount || 0),
+        projected: false,
+      };
+    }),
+  );
 
   const avgSpent = historical.reduce((sum, h) => sum + h.spent, 0) / historical.length;
 
@@ -491,57 +462,35 @@ export async function getDailySpending(monthDate: Date) {
   };
 }
 
-export async function getRecentTransactions(limit: number = 10) {
-  const transactions = await prisma.transaction.findMany({
-    orderBy: { date: "desc" },
-    take: limit,
-    include: {
-      category: { select: { name: true, groupName: true, isIncome: true } },
-    },
-  });
-
-  return transactions.map((tx) => ({
-    id: tx.id,
-    date: tx.date,
-    payee: tx.payee,
-    amount: tx.amount,
-    categoryName: tx.category?.name || null,
-    groupName: tx.category?.groupName || null,
-    isIncome: tx.category?.isIncome || false,
-  }));
-}
-
 export async function getCashFlowTrends(months: number = 4) {
   const range = generateMonthRange(months);
-  const results = [];
+  return Promise.all(
+    range.map(async ({ monthKey, start, end }) => {
+      const [incomeResult, expenseResult] = await Promise.all([
+        prisma.transaction.aggregate({
+          where: {
+            date: { gte: start, lte: end },
+            category: { isIncome: true },
+          },
+          _sum: { amount: true },
+        }),
+        prisma.transaction.aggregate({
+          where: {
+            date: { gte: start, lte: end },
+            category: catFilter,
+          },
+          _sum: { amount: true },
+        }),
+      ]);
 
-  for (const { monthKey, start, end } of range) {
-    const [incomeResult, expenseResult] = await Promise.all([
-      prisma.transaction.aggregate({
-        where: {
-          date: { gte: start, lte: end },
-          category: { isIncome: true },
-        },
-        _sum: { amount: true },
-      }),
-      prisma.transaction.aggregate({
-        where: {
-          date: { gte: start, lte: end },
-          category: catFilter,
-        },
-        _sum: { amount: true },
-      }),
-    ]);
-
-    results.push({
-      month: monthKey,
-      label: format(start, "MMM"),
-      income: Math.abs(incomeResult._sum.amount || 0),
-      expenses: Math.abs(expenseResult._sum.amount || 0),
-    });
-  }
-
-  return results;
+      return {
+        month: monthKey,
+        label: format(start, "MMM"),
+        income: Math.abs(incomeResult._sum.amount || 0),
+        expenses: Math.abs(expenseResult._sum.amount || 0),
+      };
+    }),
+  );
 }
 
 export async function getTopExpenseCategories(monthDate: Date, limit: number = 5) {

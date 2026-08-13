@@ -77,6 +77,9 @@ ACTUAL_SERVER_URL         # Actual Budget server (e.g. http://YOUR-SERVER-IP:500
 ACTUAL_PASSWORD           # Actual Budget password
 ACTUAL_SYNC_ID            # Budget file UUID to sync
 SITE_PASSWORD             # Dashboard login password
+TRUSTED_PROXY             # Set only when a reverse proxy in front of the app overwrites X-Forwarded-For.
+                          # Empty (default) means the header is ignored and login rate limiting shares one
+                          # bucket — a directly-reachable app cannot trust a client-supplied header.
 ANTHROPIC_API_KEY         # Optional — enables AI insights
 SPOTLIGHT_CATEGORIES      # Exactly 3 comma-separated category names; invalid/unset hides the spotlight column
 

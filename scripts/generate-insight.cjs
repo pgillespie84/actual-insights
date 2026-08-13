@@ -3,6 +3,13 @@ const { Pool } = require("pg");
 require("dotenv").config({ override: true });
 
 const { loadConfig } = require("../src/lib/loadConfig.cjs");
+const { backfillMonths } = require("../src/lib/backfill.cjs");
+const {
+  getCurrentMonthKeyET,
+  getCurrentDayET,
+  getDaysInMonth,
+  getPreviousMonthKey,
+} = require("../src/lib/timezone.cjs");
 
 const { SKIP_CATEGORIES, SKIP_INCOME, NET_WORTH_GROUPS, HOUSEHOLD_NAMES } = loadConfig();
 
@@ -36,39 +43,6 @@ Be casual and encouraging — like a helpful friend wrapping up the month. Use p
 Mention specific categories and dollar amounts. Celebrate wins, note areas to watch next month.
 The data includes savingsFlows showing actual money moved in/out of savings accounts — use this for savings commentary rather than the calculated savingsRate.
 Start each bullet point with "- " on its own line. Do not use headers or any other formatting.`;
-
-function getCurrentMonthKeyET() {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(now);
-  const year = parts.find((p) => p.type === "year").value;
-  const month = parts.find((p) => p.type === "month").value;
-  return `${year}-${month}`;
-}
-
-function getCurrentDayET() {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    day: "numeric",
-  }).formatToParts(now);
-  return Number(parts.find((p) => p.type === "day").value);
-}
-
-function getDaysInMonth(year, month) {
-  return new Date(year, month, 0).getDate();
-}
-
-function getPreviousMonthKey(monthKey) {
-  const [year, month] = monthKey.split("-").map(Number);
-  if (month === 1) {
-    return `${year - 1}-12`;
-  }
-  return `${year}-${String(month - 1).padStart(2, "0")}`;
-}
 
 // dayOfMonth: pass for current (in-progress) month to enable projections; omit for completed months
 async function gatherMonthData(pool, monthKey, dayOfMonth) {
@@ -380,17 +354,18 @@ async function main() {
     if (isBackfill) {
       console.log("Running backfill — regenerating insights for all months...\n");
 
-      // Delete all existing insights so we regenerate with fixed queries
-      await pool.query(`DELETE FROM "DailyInsight"`);
-      console.log("Cleared existing insights.\n");
-
       const allMonths = await getAllMonthKeys(pool);
       const monthsToProcess = allMonths.filter((m) => m <= currentMonthKey);
 
-      for (const monthKey of monthsToProcess) {
-        const isCompleted = monthKey < currentMonthKey;
-        await generateInsight(pool, monthKey, isCompleted);
-      }
+      // Each month is cleared only when the run reaches it, so a failure
+      // partway through cannot wipe the months it never got to.
+      await backfillMonths({
+        months: monthsToProcess,
+        deleteMonth: (monthKey) =>
+          pool.query(`DELETE FROM "DailyInsight" WHERE "monthKey" = $1`, [monthKey]),
+        generateMonth: (monthKey) =>
+          generateInsight(pool, monthKey, monthKey < currentMonthKey),
+      });
     } else {
       const previousMonthKey = getPreviousMonthKey(currentMonthKey);
 

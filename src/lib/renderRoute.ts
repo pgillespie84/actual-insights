@@ -1,16 +1,12 @@
 /**
- * Generic deep module for rendering app routes to PDF or PNG via a
- * browserless/chromium container.
+ * Renders an app route to PDF via a browserless/chromium container.
  *
- * Phase 2 of PRD #7. Kept intentionally generic so future features
- * (per-widget exports, year-end reports, social cards) can reuse it.
+ * The PNG path and its clip/fullPage options were never called and have been
+ * removed; add them back alongside a caller that needs them.
  */
 
 export type RenderOpts = {
-  format: "pdf" | "png";
   viewport?: { width: number; height: number };
-  clip?: { x: number; y: number; width: number; height: number };
-  fullPage?: boolean;
 };
 
 function requireEnv(name: string): string {
@@ -42,36 +38,17 @@ export async function renderRoute(path: string, opts: RenderOpts): Promise<Buffe
   const tokenSuffix = renderToken ? `${separator}token=${encodeURIComponent(renderToken)}` : "";
   const url = `${renderBaseUrl}${path}${tokenSuffix}`;
 
-  const endpoint =
-    opts.format === "pdf"
-      ? `${browserlessUrl}/pdf?token=${encodeURIComponent(browserlessToken)}`
-      : `${browserlessUrl}/screenshot?token=${encodeURIComponent(browserlessToken)}`;
+  const endpoint = `${browserlessUrl}/pdf?token=${encodeURIComponent(browserlessToken)}`;
 
-  const gotoOptions = { waitUntil: "networkidle2" as const, timeout: 30_000 };
-
-  let body: Record<string, unknown>;
-  if (opts.format === "pdf") {
-    body = {
-      url,
-      gotoOptions,
-      options: {
-        format: "letter",
-        printBackground: true,
-      },
-      ...(opts.viewport ? { viewport: opts.viewport } : {}),
-    };
-  } else {
-    body = {
-      url,
-      gotoOptions,
-      options: {
-        type: "png",
-        ...(opts.clip ? { clip: opts.clip } : {}),
-        ...(opts.fullPage !== undefined ? { fullPage: opts.fullPage } : { fullPage: true }),
-      },
-      ...(opts.viewport ? { viewport: opts.viewport } : {}),
-    };
-  }
+  const body = {
+    url,
+    gotoOptions: { waitUntil: "networkidle2" as const, timeout: 30_000 },
+    options: {
+      format: "letter",
+      printBackground: true,
+    },
+    ...(opts.viewport ? { viewport: opts.viewport } : {}),
+  };
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -82,7 +59,7 @@ export async function renderRoute(path: string, opts: RenderOpts): Promise<Buffe
   if (!response.ok) {
     const text = await response.text().catch(() => "<no body>");
     throw new Error(
-      `Browserless ${opts.format} render failed: ${response.status} ${response.statusText} — ${text}`,
+      `Browserless PDF render failed: ${response.status} ${response.statusText} — ${text}`,
     );
   }
 

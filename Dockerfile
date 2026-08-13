@@ -1,10 +1,31 @@
 FROM node:20-alpine AS base
 
-# Install dependencies
+# Full dependency tree, used only to build
 FROM base AS deps
 WORKDIR /app
+# better-sqlite3 (via @actual-app/api) has no prebuilt binary for every
+# platform, and the prebuilt download can fail transiently. Without a
+# toolchain the node-gyp fallback dies on missing Python. These stages are
+# build-only, so none of this reaches the runner image.
+RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 RUN npm ci
+
+# Runtime dependency tree. The CJS scripts (sync, generate-insight,
+# backfill-snapshots) run from the image and need pg, dotenv, @actual-app/api
+# and @anthropic-ai/sdk, and the entrypoint needs the prisma CLI — all of which
+# are in `dependencies`, so --omit=dev keeps them. Verified that prisma can
+# still load the TypeScript prisma.config.ts without dev deps: `typescript`
+# arrives transitively through `prisma`, and `tsx` is not required.
+FROM base AS proddeps
+WORKDIR /app
+# better-sqlite3 (via @actual-app/api) has no prebuilt binary for every
+# platform, and the prebuilt download can fail transiently. Without a
+# toolchain the node-gyp fallback dies on missing Python. These stages are
+# build-only, so none of this reaches the runner image.
+RUN apk add --no-cache python3 make g++
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 # Build the app
 FROM base AS builder
@@ -39,8 +60,14 @@ COPY --from=builder /app/scripts ./scripts
 # — mount config/dashboard.json or point DASHBOARD_CONFIG at it (on Unraid:
 # /data/config.json, which lives on the appdata volume).
 COPY --from=builder /app/src/lib/loadConfig.cjs ./src/lib/loadConfig.cjs
+COPY --from=builder /app/src/lib/backfill.cjs ./src/lib/backfill.cjs
+COPY --from=builder /app/src/lib/timezone.cjs ./src/lib/timezone.cjs
 COPY --from=builder /app/config/dashboard.example.json ./config/dashboard.example.json
-COPY --from=builder /app/node_modules ./node_modules
+# Runtime deps only. This used to copy the full dev tree from the builder,
+# which overwrote the standalone bundle's own node_modules and shipped every
+# dev toolchain package into production: 526 packages and 1.1G, against 209
+# packages and 908M for runtime deps alone.
+COPY --from=proddeps /app/node_modules ./node_modules
 
 COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh

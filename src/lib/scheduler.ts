@@ -1,18 +1,13 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
-import type { Cron as CronType } from "croner";
+import { Cron } from "croner";
 import { prisma } from "./prisma";
+import { getCurrentMonthKeyET, getPreviousMonthKey } from "./timezone";
 import { renderRoute } from "./renderRoute";
 import { sendDashboardEmail, sendSyncFailureAlert, sendSyncRecoveryAlert } from "./mailer";
 
-type CronCtor = new (
-  expr: string,
-  opts: { timezone?: string; protect?: boolean },
-  fn: () => void | Promise<void>,
-) => CronType;
-
 // Module-scope set keeps Cron instances alive (prevents GC).
-const jobs = new Set<CronType>();
+const jobs = new Set<Cron>();
 let started = false;
 let syncRunning = false;
 
@@ -143,28 +138,11 @@ async function runSyncJob() {
 // Email job
 // ---------------------------------------------------------------------------
 
-function getPreviousMonthKeyET(): string {
-  const now = new Date();
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(now);
-  const year = Number(parts.find((p) => p.type === "year")!.value);
-  const month = Number(parts.find((p) => p.type === "month")!.value);
-
-  // Go back one month
-  const prevMonth = month === 1 ? 12 : month - 1;
-  const prevYear = month === 1 ? year - 1 : year;
-  return `${prevYear}-${String(prevMonth).padStart(2, "0")}`;
-}
-
 async function runEmailJob() {
-  const month = getPreviousMonthKeyET();
+  const month = getPreviousMonthKey(getCurrentMonthKeyET());
   log(`email job tick: rendering dashboard for ${month}`);
   try {
     const pdfBuffer = await renderRoute(`/?month=${month}&print=1`, {
-      format: "pdf",
       viewport: { width: 1280, height: 900 },
     });
     log(`email job tick: PDF rendered (${pdfBuffer.length} bytes), sending`);
@@ -197,10 +175,8 @@ export async function startScheduler(): Promise<void> {
   }
 
   try {
-    const mod = (await import("croner")) as unknown as { Cron: CronCtor };
-
     if (syncCron) {
-      const job = new mod.Cron(syncCron, { timezone, protect: true }, runSyncJob);
+      const job = new Cron(syncCron, { timezone, protect: true }, runSyncJob);
       jobs.add(job);
       log(`sync job registered: "${syncCron}" (tz=${timezone}) next=${job.nextRun()?.toISOString()}`);
     } else {
@@ -208,7 +184,7 @@ export async function startScheduler(): Promise<void> {
     }
 
     if (emailCron) {
-      const job = new mod.Cron(emailCron, { timezone, protect: true }, runEmailJob);
+      const job = new Cron(emailCron, { timezone, protect: true }, runEmailJob);
       jobs.add(job);
       log(`email job registered: "${emailCron}" (tz=${timezone}) next=${job.nextRun()?.toISOString()}`);
     } else {

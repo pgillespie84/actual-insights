@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateMonthRange, expenseCategoryFilter } from "./query-utils";
+import { generateMonthRange, expenseCategoryFilter, resolveMonth } from "./query-utils";
 import { SKIP_CATEGORIES, SKIP_INCOME } from "./constants";
 
 beforeEach(() => { vi.useFakeTimers(); });
@@ -44,4 +44,24 @@ test("expenseCategoryFilter returns skip-list where clause", () => {
     hidden: false,
     name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME] },
   });
+});
+
+// Extracted from three API routes that carried a byte-identical copy. The
+// fallback is the interesting part: when the current ET month has no data yet
+// (early in a month, before a sync), the newest month that does is used.
+test("resolveMonth falls back to the newest available month", () => {
+  const available = ["2026-07", "2026-06"];
+  expect(resolveMonth(null, available, "2026-08").monthKey).toBe("2026-07");
+});
+
+test("resolveMonth prefers the current month when data exists for it", () => {
+  const available = ["2026-08", "2026-07"];
+  expect(resolveMonth(null, available, "2026-08").monthKey).toBe("2026-08");
+});
+
+test("resolveMonth honours an explicit request", () => {
+  const r = resolveMonth("2026-06", ["2026-08", "2026-07", "2026-06"], "2026-08");
+  expect(r.monthKey).toBe("2026-06");
+  expect(r.monthDate.getFullYear()).toBe(2026);
+  expect(r.monthDate.getMonth()).toBe(5);
 });

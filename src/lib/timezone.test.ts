@@ -40,3 +40,19 @@ test("getCurrentMonthKeyET handles DST spring-forward boundary", async () => {
   const { getCurrentMonthKeyET } = await import("./timezone.ts");
   expect(getCurrentMonthKeyET()).toBe("2026-03");
 });
+
+// Consolidating three copies of this helper: the script's version, the
+// scheduler's version, and this one. The year boundary is where they could
+// silently disagree.
+test("getPreviousMonthKey rolls back across a year boundary", async () => {
+  const { getPreviousMonthKey } = await import("./timezone.ts");
+  expect(getPreviousMonthKey("2026-01")).toBe("2025-12");
+  expect(getPreviousMonthKey("2026-03")).toBe("2026-02");
+});
+
+test("getDaysInMonth handles leap years", async () => {
+  const { getDaysInMonth } = await import("./timezone.ts");
+  expect(getDaysInMonth(2024, 2)).toBe(29);
+  expect(getDaysInMonth(2026, 2)).toBe(28);
+  expect(getDaysInMonth(2026, 4)).toBe(30);
+});

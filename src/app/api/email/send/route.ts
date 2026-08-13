@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
     const month = (body as { month?: string }).month || getCurrentMonthKeyET();
 
     const pdfBuffer = await renderRoute(`/?month=${month}&print=1`, {
-      format: "pdf",
       viewport: { width: 1280, height: 900 },
     });
 
