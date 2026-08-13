@@ -105,11 +105,12 @@ test("category and account names travel as parameters, never as query text", asy
     }
   }
 
-  const parameterised = pool.calls.filter((c) =>
-    c.values.some((v) => Array.isArray(v) && v.some((n) => names.includes(n as string))),
+  const withoutList = pool.calls.filter(
+    (c) => !c.values.some((v) => Array.isArray(v) && v.some((n) => names.includes(n as string))),
   );
-  // Every query that filters by one of these lists must pass it as an array.
-  expect(parameterised.length).toBe(pool.calls.length - 1);
+  // The income query is the one that filters on no name list at all: it selects
+  // on c."isIncome" alone. Everything else must carry its list as an array.
+  expect(withoutList.map((c) => c.text.includes("total_income"))).toEqual([true]);
 });
 
 // A name with an apostrophe used to need escaping before it could be spliced
