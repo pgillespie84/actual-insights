@@ -5,11 +5,14 @@ node_modules
 .env.local
 README.md
 
-# Real household config. The runner stage copies named paths and never picks
-# this up, so it does not reach the published image — but `COPY . .` in the
-# builder puts it in the build context and into an intermediate layer, and one
-# careless `COPY --from=builder /app/config` later would ship it. Keep it out
-# of the context entirely. config/dashboard.example.json is still copied in.
+# Real household config. Keeping this out of the build context is the only
+# thing that keeps it out of the image: `next build` traces it into
+# .next/standalone/config/, and the runner copies that whole tree, so a local
+# build with a real config shipped it at /app/config/dashboard.json. CI never
+# hit this because the file is gitignored and so absent from a checkout — luck,
+# not a guard. Do not remove this rule.
+# config/dashboard.example.json stays in the context and is still copied in;
+# loadConfig.cjs falls back to it.
 config/dashboard.json
 
 # Commit QA reports.
