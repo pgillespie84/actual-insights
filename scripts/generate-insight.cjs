@@ -348,7 +348,10 @@ async function replaceInsight(pool, monthKey, content) {
     );
     await client.query("COMMIT");
   } catch (err) {
-    await client.query("ROLLBACK");
+    // A dropped connection is one way to land here, and it would make the
+    // ROLLBACK reject too. Swallow that one so the original error is what the
+    // caller sees.
+    await client.query("ROLLBACK").catch(() => {});
     throw err;
   } finally {
     client.release();
