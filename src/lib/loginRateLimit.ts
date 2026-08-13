@@ -118,11 +118,19 @@ export function recordLoginFailure(
 /**
  * Called after a successful login.
  *
- * This clears the global ceiling as well as the key's own record. The ceiling
- * is checked before the password is, so leaving it set would keep rejecting the
- * correct password until the window expired — locking out the household with no
- * way back in. Reaching this function requires knowing the password, so an
+ * Clears the global ceiling as well as the key's own record, so failures do not
+ * accumulate across a successful login and push a later, unrelated attempt over
+ * the limit. Reaching this function requires knowing the password, so an
  * attacker cannot use it to reset their own attempts.
+ *
+ * Note what this does NOT do. The route gates on checkLoginAllowed before it
+ * verifies the password, so once the ceiling is active this function is
+ * unreachable and a correct password is refused like any other — see the
+ * characterisation test in src/app/api/auth/login/route.test.ts. That is the
+ * control working as intended: checking the password while locked out would let
+ * an attacker keep guessing at full rate. The lockout is bounded, not
+ * permanent, because a gated request returns before recordLoginFailure, so the
+ * counter and window stop growing and the window expires on its own.
  */
 export function clearLoginAttempts(key: string): void {
   attempts.delete(key);
