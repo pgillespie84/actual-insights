@@ -80,6 +80,20 @@ test("many distinct keys cannot exceed the global failure ceiling", () => {
   expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
 });
 
+// The ceiling is checked before the password is, so without this a legitimate
+// user cannot get back in until the window expires — the correct password is
+// rejected too. Reaching this requires knowing the password, so an attacker
+// cannot use it to reset their own attempts.
+test("a successful login clears the global ceiling", () => {
+  const now = Date.now();
+  for (let i = 0; i < 50; i++) recordLoginFailure(`198.51.100.${i}`, now);
+  expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
+
+  clearLoginAttempts("203.0.113.77");
+
+  expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(true);
+});
+
 test("clients are tracked independently", () => {
   for (let i = 0; i < 5; i++) recordLoginFailure(IP);
 
