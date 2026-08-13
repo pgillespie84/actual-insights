@@ -56,9 +56,16 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/scripts ./scripts
 # Config loader shared by the Next server code and the CJS scripts, plus the
-# placeholder config it falls back to. Real values are NOT baked into the image
-# — mount config/dashboard.json or point DASHBOARD_CONFIG at it (on Unraid:
-# /data/config.json, which lives on the appdata volume).
+# placeholder config it falls back to. Mount the real config or point
+# DASHBOARD_CONFIG at it (on Unraid: /data/config.json, on the appdata volume).
+#
+# Only the example is copied here, but that alone did NOT keep real values out
+# of the image: `next build` traces config/dashboard.json into
+# .next/standalone/config/, and the COPY above brings the whole standalone tree
+# in. A local build with a real config produced an image containing it. The
+# file is excluded in .dockerignore so the builder never sees it — verify with
+# `docker run --rm --entrypoint sh <image> -c 'ls config/'` after changing
+# anything here.
 COPY --from=builder /app/src/lib/loadConfig.cjs ./src/lib/loadConfig.cjs
 COPY --from=builder /app/src/lib/backfill.cjs ./src/lib/backfill.cjs
 COPY --from=builder /app/src/lib/timezone.cjs ./src/lib/timezone.cjs
