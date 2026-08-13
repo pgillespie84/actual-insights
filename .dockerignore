@@ -4,3 +4,13 @@ node_modules
 .env
 .env.local
 README.md
+
+# Real household config. The runner stage copies named paths and never picks
+# this up, so it does not reach the published image — but `COPY . .` in the
+# builder puts it in the build context and into an intermediate layer, and one
+# careless `COPY --from=builder /app/config` later would ship it. Keep it out
+# of the context entirely. config/dashboard.example.json is still copied in.
+config/dashboard.json
+
+# Commit QA reports.
+.qa
