@@ -5,6 +5,7 @@ const { Pool } = require("pg");
 require("dotenv").config({ override: true });
 
 const { loadConfig } = require("../src/lib/loadConfig.cjs");
+const { insertRows } = require("../src/lib/batchInsert.cjs");
 
 const { SKIP_CATEGORIES, SKIP_INCOME } = loadConfig();
 
@@ -30,37 +31,39 @@ async function main() {
   let totalRecords = 0;
 
   try {
-    // 1. Sync accounts
+    // 1. Sync accounts, and today's balance snapshot for each (ET date).
+    // One balance fetch feeds both: they used to be two loops asking the API
+    // for the same numbers twice.
     console.log("Syncing accounts...");
     const accounts = await api.getAccounts();
-    for (const acct of accounts) {
-      const balance = await api.getAccountBalance(acct.id);
-      await pool.query(
-        `INSERT INTO "Account" (id, name, type, balance)
-         VALUES ($1, $2, $3, $4)
-         ON CONFLICT (id) DO UPDATE SET name=$2, type=$3, balance=$4`,
-        [acct.id, acct.name, acct.type || null, balance]
-      );
-    }
-    console.log(`  ${accounts.length} accounts synced`);
-    totalRecords += accounts.length;
-
-    // 1b. Upsert today's balance snapshot per account (ET date)
     const todayET = new Intl.DateTimeFormat("en-CA", {
       timeZone: "America/New_York",
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
     }).format(new Date()); // YYYY-MM-DD
+
+    const accountRows = [];
+    const snapshotRows = [];
     for (const acct of accounts) {
       const balance = await api.getAccountBalance(acct.id);
-      await pool.query(
-        `INSERT INTO "AccountBalanceSnapshot" ("accountId", date, balance)
-         VALUES ($1, $2, $3)
-         ON CONFLICT ("accountId", date) DO UPDATE SET balance = EXCLUDED.balance`,
-        [acct.id, todayET, balance]
-      );
+      accountRows.push([acct.id, acct.name, acct.type || null, balance]);
+      snapshotRows.push([acct.id, todayET, balance]);
     }
+
+    await insertRows(pool, {
+      table: "Account",
+      columns: ["id", "name", "type", "balance"],
+      conflictTarget: ["id"],
+    }, accountRows);
+    console.log(`  ${accounts.length} accounts synced`);
+    totalRecords += accounts.length;
+
+    await insertRows(pool, {
+      table: "AccountBalanceSnapshot",
+      columns: ["accountId", "date", "balance"],
+      conflictTarget: ["accountId", "date"],
+    }, snapshotRows);
     console.log(`  ${accounts.length} balance snapshots upserted for ${todayET}`);
 
     // 2. Sync categories
@@ -70,15 +73,17 @@ async function main() {
     const groupMap = new Map(categoryGroups.map((g) => [g.id, g.name]));
 
     const categories = categoriesRaw.filter((c) => "group_id" in c);
-    for (const cat of categories) {
-      const groupName = groupMap.get(cat.group_id) || null;
-      await pool.query(
-        `INSERT INTO "Category" (id, name, "groupName", hidden, "isIncome")
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id) DO UPDATE SET name=$2, "groupName"=$3, hidden=$4, "isIncome"=$5`,
-        [cat.id, cat.name, groupName, cat.hidden || false, cat.is_income || false]
-      );
-    }
+    await insertRows(pool, {
+      table: "Category",
+      columns: ["id", "name", "groupName", "hidden", "isIncome"],
+      conflictTarget: ["id"],
+    }, categories.map((cat) => [
+      cat.id,
+      cat.name,
+      groupMap.get(cat.group_id) || null,
+      cat.hidden || false,
+      cat.is_income || false,
+    ]));
     console.log(`  ${categories.length} categories synced`);
     totalRecords += categories.length;
 
@@ -90,41 +95,40 @@ async function main() {
 
     // 4. Sync transactions (per account)
     console.log("Syncing transactions...");
-    let txCount = 0;
     const startDate = "2020-01-01";
     const endDate = new Date().toISOString().slice(0, 10);
+    const transactionRows = [];
 
     for (const acct of accounts) {
       const transactions = await api.getTransactions(acct.id, startDate, endDate);
       for (const tx of transactions) {
         if (tx.is_child) continue;
 
-        const payeeName = tx.payee_name || payeeMap.get(tx.payee) || null;
-
-        await pool.query(
-          `INSERT INTO "Transaction" (id, date, amount, payee, notes, "categoryId", "accountId")
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           ON CONFLICT (id) DO UPDATE SET date=$2, amount=$3, payee=$4, notes=$5, "categoryId"=$6, "accountId"=$7`,
-          [
-            tx.id,
-            tx.date,
-            tx.amount,
-            payeeName,
-            tx.notes || null,
-            tx.category || null,
-            acct.id,
-          ]
-        );
-        txCount++;
+        transactionRows.push([
+          tx.id,
+          tx.date,
+          tx.amount,
+          tx.payee_name || payeeMap.get(tx.payee) || null,
+          tx.notes || null,
+          tx.category || null,
+          acct.id,
+        ]);
       }
     }
+
+    await insertRows(pool, {
+      table: "Transaction",
+      columns: ["id", "date", "amount", "payee", "notes", "categoryId", "accountId"],
+      conflictTarget: ["id"],
+    }, transactionRows);
+    const txCount = transactionRows.length;
     console.log(`  ${txCount} transactions synced`);
     totalRecords += txCount;
 
     // 5. Sync budget amounts
     console.log("Syncing budget amounts...");
     const budgetMonths = await api.getBudgetMonths();
-    let budgetCount = 0;
+    const budgetRows = [];
 
     for (const month of budgetMonths) {
       const budgetData = await api.getBudgetMonth(month);
@@ -135,17 +139,19 @@ async function main() {
           for (const cat of cats) {
             if (!cat.budgeted && cat.budgeted !== 0) continue;
 
-            await pool.query(
-              `INSERT INTO "CategoryBudget" (id, month, "budgetedAmount", "categoryId")
-               VALUES (gen_random_uuid(), $1, $2, $3)
-               ON CONFLICT ("categoryId", month) DO UPDATE SET "budgetedAmount"=$2`,
-              [month, cat.budgeted, cat.id]
-            );
-            budgetCount++;
+            budgetRows.push([month, cat.budgeted, cat.id]);
           }
         }
       }
     }
+
+    await insertRows(pool, {
+      table: "CategoryBudget",
+      expressions: { id: "gen_random_uuid()" },
+      columns: ["month", "budgetedAmount", "categoryId"],
+      conflictTarget: ["categoryId", "month"],
+    }, budgetRows);
+    const budgetCount = budgetRows.length;
     console.log(`  ${budgetCount} budget entries synced`);
     totalRecords += budgetCount;
 
