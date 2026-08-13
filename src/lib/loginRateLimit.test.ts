@@ -80,10 +80,11 @@ test("many distinct keys cannot exceed the global failure ceiling", () => {
   expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
 });
 
-// The ceiling is checked before the password is, so without this a legitimate
-// user cannot get back in until the window expires — the correct password is
-// rejected too. Reaching this requires knowing the password, so an attacker
-// cannot use it to reset their own attempts.
+// Unit-level: the counter is cleared, so failures do not accumulate across a
+// successful login. This deliberately calls clearLoginAttempts directly and so
+// proves nothing about the route — while the ceiling is active the route never
+// reaches this function at all. That ordering is pinned separately in
+// src/app/api/auth/login/route.test.ts.
 test("a successful login clears the global ceiling", () => {
   const now = Date.now();
   for (let i = 0; i < 50; i++) recordLoginFailure(`198.51.100.${i}`, now);
