@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateMonthRange, expenseCategoryFilter, resolveMonth } from "./query-utils";
+import { generateMonthRange, expenseCategoryFilter, resolveMonth, mapWithConcurrency } from "./query-utils";
 import { SKIP_CATEGORIES, SKIP_INCOME } from "./constants";
 
 beforeEach(() => { vi.useFakeTimers(); });
@@ -64,4 +64,63 @@ test("resolveMonth honours an explicit request", () => {
   expect(r.monthKey).toBe("2026-06");
   expect(r.monthDate.getFullYear()).toBe(2026);
   expect(r.monthDate.getMonth()).toBe(5);
+});
+
+// An empty database has no available months, and `availableMonths[0]` was then
+// undefined — parse(undefined) gave an Invalid Date that propagated into every
+// downstream query instead of rendering an empty month.
+test("resolveMonth falls back to the current month when nothing is available", () => {
+  const r = resolveMonth(null, [], "2026-08");
+  expect(r.monthKey).toBe("2026-08");
+  expect(r.monthDate.getTime()).not.toBeNaN();
+});
+
+// `month` is a query parameter, so its value is whatever the caller sends. An
+// unparseable one took the same path as a real key and produced NaN dates.
+test.each(["garbage", "2026-13", "2026", "2026-1", ""])(
+  "resolveMonth ignores the unparseable request %j",
+  (requested) => {
+    const r = resolveMonth(requested, ["2026-07"], "2026-08");
+    expect(r.monthKey).toBe("2026-07");
+    expect(r.monthDate.getTime()).not.toBeNaN();
+  },
+);
+
+// /api/analytics runs four queries at once, two of which fan out over a month
+// range that itself issues one or two queries per month. Unbounded, that put
+// ~32 queries against a Prisma pool sized num_cpus * 2 + 1, so the surplus
+// queued against the 10s pool_timeout.
+test("mapWithConcurrency runs no more than the limit at once", async () => {
+  let inFlight = 0;
+  let peak = 0;
+  const release: Array<() => void> = [];
+
+  const pending = mapWithConcurrency([1, 2, 3, 4, 5, 6, 7, 8], 3, async (n) => {
+    inFlight++;
+    peak = Math.max(peak, inFlight);
+    await new Promise<void>((resolve) => release.push(resolve));
+    inFlight--;
+    return n;
+  });
+
+  // Let each started task settle, then release them one at a time so a slot
+  // frees and the next task can start.
+  for (let i = 0; i < 8; i++) {
+    await vi.advanceTimersByTimeAsync(0);
+    release[i]?.();
+  }
+  await pending;
+
+  expect(peak).toBe(3);
+});
+
+test("mapWithConcurrency returns results in input order", async () => {
+  const delays = [30, 0, 20, 10];
+  const pending = mapWithConcurrency(delays, 2, async (ms, i) => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    return i;
+  });
+
+  await vi.advanceTimersByTimeAsync(100);
+  expect(await pending).toEqual([0, 1, 2, 3]);
 });

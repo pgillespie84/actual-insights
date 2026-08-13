@@ -190,6 +190,9 @@ export async function startScheduler(): Promise<void> {
     } else {
       log("EMAIL_CRON unset, skipping email schedule");
     }
+    // Covers a bad cron expression or a failed registration. It no longer
+    // covers loading croner: that import moved to the top of the file, so a
+    // module-load failure crashes at import time rather than arriving here.
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     log(`failed to register jobs: ${message}`);

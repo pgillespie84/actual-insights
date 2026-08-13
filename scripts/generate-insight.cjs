@@ -268,7 +268,13 @@ async function gatherMonthData(pool, monthKey, dayOfMonth) {
   return result;
 }
 
-async function generateInsight(pool, monthKey, isCompleted) {
+/**
+ * Builds the insight text for a month without writing anything. Returns
+ * undefined when the month has no data to describe.
+ *
+ * Kept separate from storage so `--backfill` can generate before it deletes.
+ */
+async function buildInsight(pool, monthKey, isCompleted) {
   console.log(`\nGenerating AI insight for ${monthKey}${isCompleted ? " (completed month)" : ""}...`);
 
   const dayOfMonth = isCompleted ? undefined : getCurrentDayET();
@@ -312,19 +318,50 @@ async function generateInsight(pool, monthKey, isCompleted) {
     ],
   });
 
-  const insightContent = message.content
+  return message.content
     .filter((block) => block.type === "text")
     .map((block) => block.text)
     .join("\n");
+}
 
+async function insertInsight(pool, monthKey, content) {
   await pool.query(
     `INSERT INTO "DailyInsight" (id, "createdAt", content, "monthKey")
      VALUES (gen_random_uuid(), NOW(), $1, $2)`,
-    [insightContent, monthKey]
+    [content, monthKey]
   );
+}
 
+/**
+ * Swaps a month's insight for a new one. The delete and the insert share a
+ * transaction, so an interrupted run cannot leave the month with nothing.
+ */
+async function replaceInsight(pool, monthKey, content) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM "DailyInsight" WHERE "monthKey" = $1`, [monthKey]);
+    await client.query(
+      `INSERT INTO "DailyInsight" (id, "createdAt", content, "monthKey")
+       VALUES (gen_random_uuid(), NOW(), $1, $2)`,
+      [content, monthKey]
+    );
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function generateInsight(pool, monthKey, isCompleted) {
+  const content = await buildInsight(pool, monthKey, isCompleted);
+  if (content === undefined) return;
+
+  await insertInsight(pool, monthKey, content);
   console.log(`  Insight for ${monthKey} stored successfully.`);
-  console.log(insightContent);
+  console.log(content);
 }
 
 async function needsInsight(pool, monthKey) {
@@ -357,14 +394,14 @@ async function main() {
       const allMonths = await getAllMonthKeys(pool);
       const monthsToProcess = allMonths.filter((m) => m <= currentMonthKey);
 
-      // Each month is cleared only when the run reaches it, so a failure
-      // partway through cannot wipe the months it never got to.
+      // Each month is generated before anything is deleted, and the swap runs
+      // in one transaction, so a failed API call costs no stored insight.
       await backfillMonths({
         months: monthsToProcess,
-        deleteMonth: (monthKey) =>
-          pool.query(`DELETE FROM "DailyInsight" WHERE "monthKey" = $1`, [monthKey]),
         generateMonth: (monthKey) =>
-          generateInsight(pool, monthKey, monthKey < currentMonthKey),
+          buildInsight(pool, monthKey, monthKey < currentMonthKey),
+        replaceMonth: (monthKey, content) =>
+          replaceInsight(pool, monthKey, content),
       });
     } else {
       const previousMonthKey = getPreviousMonthKey(currentMonthKey);
