@@ -18,6 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  process.env = { ...originalEnv };
   resetLoginRateLimit();
 });
 
