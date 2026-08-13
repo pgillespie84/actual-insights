@@ -31,10 +31,16 @@ function buildInsertStatement({ table, columns, conflictTarget, rows, expression
     .filter((c) => !conflictTarget.includes(c))
     .map((c) => `"${c}" = EXCLUDED."${c}"`);
 
+  // Nothing left to assign means the existing row already holds these exact
+  // values, and `DO UPDATE SET` with an empty list is a syntax error.
+  const onConflict = updates.length > 0
+    ? `DO UPDATE SET ${updates.join(", ")}`
+    : "DO NOTHING";
+
   const text =
     `INSERT INTO "${table}" (${quoted})\n` +
     `VALUES ${tuples.join(", ")}\n` +
-    `ON CONFLICT (${conflictTarget.map((c) => `"${c}"`).join(", ")}) DO UPDATE SET ${updates.join(", ")}`;
+    `ON CONFLICT (${conflictTarget.map((c) => `"${c}"`).join(", ")}) ${onConflict}`;
 
   return { text, values };
 }
@@ -50,6 +56,10 @@ const MAX_PARAMS = 65535;
  * "ON CONFLICT DO UPDATE command cannot affect row a second time". Row-at-a-time
  * inserts never hit this, because the second insert simply updated what the
  * first had written, so collapsing here preserves the old behaviour.
+ *
+ * Assumes the conflict target is NOT NULL, which every table using this helper
+ * satisfies. Postgres treats two NULLs as distinct under a unique constraint,
+ * so a nullable key column would collapse rows the database would have kept.
  */
 function collapseByConflictTarget({ columns, conflictTarget }, rows) {
   const keyIndexes = conflictTarget.map((c) => columns.indexOf(c));

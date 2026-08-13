@@ -46,6 +46,21 @@ test("a generated column is an expression, not a parameter", () => {
   expect(values).toEqual(["2026-03", 500, "cat-1", "2026-03", 700, "cat-2"]);
 });
 
+// With every column in the conflict target there is nothing left to assign, and
+// `DO UPDATE SET` with an empty list is a syntax error. The row already exists
+// with exactly these values, so there is nothing to do.
+test("a table whose columns are all key columns does nothing on conflict", () => {
+  const { text } = buildInsertStatement({
+    table: "TransactionTag",
+    columns: ["transactionId", "tag"],
+    conflictTarget: ["transactionId", "tag"],
+    rows: [["tx-1", "vacation"]],
+  });
+
+  expect(text).toContain(`ON CONFLICT ("transactionId", "tag") DO NOTHING`);
+  expect(text).not.toContain("DO UPDATE");
+});
+
 function fakePool() {
   const calls: { text: string; values: unknown[] }[] = [];
   return {
