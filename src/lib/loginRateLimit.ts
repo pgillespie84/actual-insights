@@ -115,8 +115,19 @@ export function recordLoginFailure(
   return { failures, lockedUntil: entry.lockedUntil };
 }
 
+/**
+ * Called after a successful login.
+ *
+ * This clears the global ceiling as well as the key's own record. The ceiling
+ * is checked before the password is, so leaving it set would keep rejecting the
+ * correct password until the window expired — locking out the household with no
+ * way back in. Reaching this function requires knowing the password, so an
+ * attacker cannot use it to reset their own attempts.
+ */
 export function clearLoginAttempts(key: string): void {
   attempts.delete(key);
+  globalFailures = 0;
+  globalWindowStart = 0;
 }
 
 /** Test seam. Not used by application code. */
