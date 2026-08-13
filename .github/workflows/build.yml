@@ -18,6 +18,13 @@ env:
 
 jobs:
   build:
+    # Pull requests from forks do not build. A PR build runs the Dockerfile out
+    # of the PR's own code, and this repo is public, so anyone can open one.
+    # GitHub already downgrades GITHUB_TOKEN to read-only for fork PRs, but not
+    # running arbitrary build steps at all is the simpler guarantee.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
