@@ -17,10 +17,16 @@ const { resolveConfigSource } = require("./configSource.cjs");
  *
  * Shared by the Next server code (src/lib/constants.ts) and the CJS scripts.
  *
- * @param {{cwd?: string, env?: Record<string, string | undefined>}} [options]
+ * `source` lets a caller that has already resolved one pass it in. constants.ts
+ * needs it anyway, to decide whether to show the placeholder banner, so without
+ * this the candidate list is walked twice at import — and two walks can in
+ * principle disagree about which file won.
+ *
+ * @param {{cwd?: string, env?: Record<string, string | undefined>,
+ *   source?: {path: string | null, contents: string | null, isExample: boolean}}} [options]
  */
 function loadConfig(options = {}) {
-  const source = resolveConfigSource(options);
+  const source = options.source ?? resolveConfigSource(options);
 
   if (source.isExample) {
     console.warn(
