@@ -1,15 +1,14 @@
-import { spawn } from "node:child_process";
-import path from "node:path";
 import { Cron } from "croner";
 import { prisma } from "./prisma";
 import { getCurrentMonthKeyET, getPreviousMonthKey } from "./timezone";
 import { renderRoute } from "./renderRoute";
+import { runScript } from "./runScript";
+import { startJob } from "./jobRegistry";
 import { sendDashboardEmail, sendSyncFailureAlert, sendSyncRecoveryAlert } from "./mailer";
 
 // Module-scope set keeps Cron instances alive (prevents GC).
 const jobs = new Set<Cron>();
 let started = false;
-let syncRunning = false;
 
 export interface SyncResultAction {
   logStatus: "success" | "error";
@@ -44,94 +43,72 @@ function log(...args: unknown[]) {
 // Sync job
 // ---------------------------------------------------------------------------
 
-function runSyncScript(): Promise<{ code: number; durationMs: number }> {
-  return new Promise((resolve) => {
-    const scriptPath = path.join(process.cwd(), "scripts", "sync.cjs");
-    const startedAt = Date.now();
-    log("spawning node", scriptPath);
-    const child = spawn(process.execPath, [scriptPath], {
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    child.stdout.on("data", (chunk: Buffer) => {
-      process.stdout.write(`[sync] ${chunk.toString()}`);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      process.stderr.write(`[sync] ${chunk.toString()}`);
-    });
-
-    child.on("exit", (code) => {
-      resolve({ code: code ?? -1, durationMs: Date.now() - startedAt });
-    });
-    child.on("error", (err) => {
-      process.stderr.write(`[sync] spawn error: ${err.message}\n`);
-      resolve({ code: -1, durationMs: Date.now() - startedAt });
-    });
-  });
-}
-
-
-async function runSyncJob() {
-  if (syncRunning) {
-    log("sync job tick: already running, skipping");
-    return;
-  }
-  syncRunning = true;
+/**
+ * Runs the sync script, then logs the outcome and alerts on a change of state.
+ *
+ * Rethrows on failure so the job registry records it as failed. The registry
+ * is also what stops this overlapping an admin-page job — the guard used to be
+ * a private `syncRunning` flag here, which the admin buttons could not see.
+ */
+async function syncAndLog(): Promise<string> {
+  const startedAt = Date.now();
+  let summary: string | null = null;
+  let failure: Error | null = null;
 
   try {
-    log("sync job tick: starting");
-    let code: number;
-    let durationMs: number;
+    summary = await runScript("sync.cjs");
+  } catch (err) {
+    failure = err instanceof Error ? err : new Error(String(err));
+  }
 
-    try {
-      const result = await runSyncScript();
-      code = result.code;
-      durationMs = result.durationMs;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      log(`sync job tick: threw ${message}`);
-      code = -1;
-      durationMs = 0;
-    }
+  const durationMs = Date.now() - startedAt;
 
-    // Atomic read-prev + write-current in a transaction
-    const prevStatus = await prisma.$transaction(async (tx) => {
-      const prev = await tx.syncLog.findFirst({
-        orderBy: { syncedAt: "desc" },
-        select: { status: true },
-      });
-
-      const action = handleSyncResult(code, durationMs, prev?.status ?? null);
-
-      await tx.syncLog.create({
-        data: { status: action.logStatus, message: action.logMessage },
-      });
-
-      return action;
+  // Atomic read-prev + write-current in a transaction
+  const action = await prisma.$transaction(async (tx) => {
+    const prev = await tx.syncLog.findFirst({
+      orderBy: { syncedAt: "desc" },
+      select: { status: true },
     });
 
-    log(`sync job tick: ${prevStatus.logStatus} in ${durationMs}ms`);
+    const result = handleSyncResult(failure ? -1 : 0, durationMs, prev?.status ?? null);
 
-    // Send alerts outside the transaction
-    if (prevStatus.alert === "recovery") {
-      log("sync recovered — sending recovery alert");
-      try {
-        await sendSyncRecoveryAlert();
-      } catch (emailErr) {
-        log("failed to send recovery alert:", emailErr);
-      }
-    } else if (prevStatus.alert === "failure") {
-      log("sync failed — sending failure alert");
-      try {
-        await sendSyncFailureAlert(new Error(prevStatus.logMessage));
-      } catch (emailErr) {
-        log("failed to send failure alert:", emailErr);
-      }
+    await tx.syncLog.create({
+      data: { status: result.logStatus, message: result.logMessage },
+    });
+
+    return result;
+  });
+
+  log(`sync job tick: ${action.logStatus} in ${durationMs}ms`);
+
+  // Send alerts outside the transaction
+  if (action.alert === "recovery") {
+    log("sync recovered — sending recovery alert");
+    try {
+      await sendSyncRecoveryAlert();
+    } catch (emailErr) {
+      log("failed to send recovery alert:", emailErr);
     }
-  } finally {
-    syncRunning = false;
+  } else if (action.alert === "failure") {
+    log("sync failed — sending failure alert");
+    try {
+      await sendSyncFailureAlert(failure ?? new Error(action.logMessage));
+    } catch (emailErr) {
+      log("failed to send failure alert:", emailErr);
+    }
   }
+
+  if (failure) throw failure;
+  return summary ?? "completed";
+}
+
+function runSyncJob() {
+  const result = startJob("sync", syncAndLog);
+  if (!result.started) {
+    log(`sync job tick: skipped, ${result.reason}`);
+    return;
+  }
+  log("sync job tick: starting");
 }
 
 // ---------------------------------------------------------------------------
