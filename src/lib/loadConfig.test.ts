@@ -35,6 +35,26 @@ test("falling back to the example config warns, naming the file", () => {
   expect(warn.mock.calls[0].join(" ")).toContain("dashboard.example.json");
 });
 
+test("an already-resolved source is used rather than resolved again", () => {
+  // constants.ts needs the resolved source anyway, to decide whether to show
+  // the placeholder banner. Passing it in means one walk of the candidate list
+  // at import instead of two, and one source of truth for which file won.
+  writeConfig("dashboard.example.json", { HOUSEHOLD_NAMES: "the household" });
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const config = loadConfig({
+    source: {
+      path: path.join(dir, "config", "dashboard.example.json"),
+      contents: null,
+      isExample: true,
+    },
+  });
+
+  expect(config.HOUSEHOLD_NAMES).toBe("the household");
+  // Still warns: the caller resolving it does not make the fallback fine.
+  expect(warn).toHaveBeenCalledTimes(1);
+});
+
 test("DASHBOARD_CONFIG_JSON beats every file and does not warn", () => {
   // Unraid installs one container from a template. Mounting a file is an
   // extra step people skip, so the whole config can arrive as one masked
