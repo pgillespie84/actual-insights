@@ -67,6 +67,8 @@ COPY --from=builder /app/scripts ./scripts
 # `docker run --rm --entrypoint sh <image> -c 'ls config/'` after changing
 # anything here.
 COPY --from=builder /app/src/lib/loadConfig.cjs ./src/lib/loadConfig.cjs
+COPY --from=builder /app/src/lib/configSource.cjs ./src/lib/configSource.cjs
+COPY --from=builder /app/src/lib/insightArgs.cjs ./src/lib/insightArgs.cjs
 COPY --from=builder /app/src/lib/backfill.cjs ./src/lib/backfill.cjs
 COPY --from=builder /app/src/lib/timezone.cjs ./src/lib/timezone.cjs
 COPY --from=builder /app/src/lib/insightData.cjs ./src/lib/insightData.cjs

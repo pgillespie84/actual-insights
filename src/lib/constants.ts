@@ -1,6 +1,7 @@
 import { loadConfig } from "./loadConfig.cjs";
+import { resolveConfigSource } from "./configSource.cjs";
 
-interface DashboardConfig {
+export interface DashboardConfig {
   HOUSEHOLD_NAMES: string;
   SKIP_CATEGORIES: string[];
   SKIP_INCOME: string[];
@@ -10,7 +11,24 @@ interface DashboardConfig {
   NET_WORTH_GROUPS: Record<string, string[]>;
 }
 
-const config: DashboardConfig = loadConfig();
+/**
+ * Which file (or env var) the config came from, and whether it is the tracked
+ * placeholder. The dashboard shows a banner when it is: running on the example
+ * means every account and category filter below matches nothing real.
+ *
+ * Resolved once here and handed to loadConfig, so there is one answer to
+ * "which file won" rather than two independent walks of the candidate list.
+ */
+const source = resolveConfigSource();
+
+export const CONFIG_SOURCE: { path: string | null; isExample: boolean } = {
+  path: source.path,
+  isExample: source.isExample,
+};
+
+const config: DashboardConfig = loadConfig({ source });
+
+export const CONFIG = config;
 
 export const SKIP_CATEGORIES: string[] = config.SKIP_CATEGORIES;
 
