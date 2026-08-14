@@ -5,6 +5,7 @@ require("dotenv").config({ override: true });
 const { loadConfig } = require("../src/lib/loadConfig.cjs");
 const { backfillMonths } = require("../src/lib/backfill.cjs");
 const { gatherMonthData } = require("../src/lib/insightData.cjs");
+const { parseInsightArgs } = require("../src/lib/insightArgs.cjs");
 const {
   getCurrentMonthKeyET,
   getCurrentDayET,
@@ -158,12 +159,23 @@ async function getAllMonthKeys(pool) {
 }
 
 async function main() {
-  const isBackfill = process.argv.includes("--backfill");
+  const args = parseInsightArgs(process.argv.slice(2));
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   const currentMonthKey = getCurrentMonthKeyET();
 
   try {
-    if (isBackfill) {
+    if (args.mode === "month") {
+      // Unconditional: the point of asking for one month is to replace what is
+      // there, so the 24-hour cache does not apply.
+      const content = await buildInsight(pool, args.month, args.month < currentMonthKey);
+      if (content === undefined) {
+        console.log(`No data for ${args.month} — nothing regenerated.`);
+      } else {
+        await replaceInsight(pool, args.month, content);
+        console.log(`  Insight for ${args.month} replaced.`);
+        console.log(content);
+      }
+    } else if (args.mode === "backfill") {
       console.log("Running backfill — regenerating insights for all months...\n");
 
       const allMonths = await getAllMonthKeys(pool);

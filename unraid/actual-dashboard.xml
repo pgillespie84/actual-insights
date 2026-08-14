@@ -11,13 +11,16 @@
 
   <Config Name="Web UI Port" Target="3000" Default="3100" Mode="tcp" Description="Port to access the dashboard." Type="Port" Display="always" Required="true" Mask="false">3100</Config>
 
-  <Config Name="Appdata Path" Target="/data" Default="/mnt/user/appdata/actual-dashboard" Mode="rw" Description="Host path where Actual Budget sync data is cached. Change the left side only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/actual-dashboard</Config>
+  <Config Name="Appdata Path" Target="/data" Default="/mnt/user/appdata/actual-dashboard" Mode="rw" Description="Host path for the Actual Budget sync cache, and where the household config file goes if you use the file option below. Change the left side only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/actual-dashboard</Config>
 
-  <Config Name="Database URL" Target="DATABASE_URL" Default="postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard" Mode="" Description="PostgreSQL connection string. Use the actual-dashboard-db container name as the host." Type="Variable" Display="always" Required="true" Mask="false">postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard</Config>
+  <Config Name="Household Config (JSON)" Target="DASHBOARD_CONFIG_JSON" Default="" Mode="" Description="Your household config as one line of JSON — account names, category skip lists, net worth groups. Use this OR the file path below. Leave both empty and the dashboard silently runs on placeholder names, so every filter and net worth group matches nothing real. See config/dashboard.example.json for the shape." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="Household Config (file path)" Target="DASHBOARD_CONFIG" Default="" Mode="" Description="Alternative to the JSON above: path inside the container to your config file. Put the file in the Appdata Path above and set this to /data/config.json." Type="Variable" Display="always" Required="false" Mask="false"></Config>
+
+  <Config Name="Database URL" Target="DATABASE_URL" Default="postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard" Mode="" Description="PostgreSQL connection string. Use the actual-dashboard-db container name as the host. Masked because it carries the database password." Type="Variable" Display="always" Required="true" Mask="true">postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard</Config>
 
   <Config Name="Actual Budget Server URL" Target="ACTUAL_SERVER_URL" Default="" Mode="" Description="URL of your self-hosted Actual Budget server, e.g. http://YOUR-SERVER-IP:5006" Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="Actual Budget Password" Target="ACTUAL_PASSWORD" Default="" Mode="" Description="Password for your Actual Budget server." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="Actual Budget Sync ID" Target="ACTUAL_SYNC_ID" Default="" Mode="" Description="UUID of the budget file to sync." Type="Variable" Display="always" Required="true" Mask="false"></Config>
+  <Config Name="Actual Budget Sync ID" Target="ACTUAL_SYNC_ID" Default="" Mode="" Description="UUID of the budget file to sync. Masked: it identifies your budget file on the Actual server." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
   <Config Name="Site Password" Target="SITE_PASSWORD" Default="" Mode="" Description="Password to log in to the dashboard." Type="Variable" Display="always" Required="true" Mask="true"></Config>
 
@@ -28,6 +31,7 @@
   <Config Name="Browserless URL" Target="BROWSERLESS_URL" Default="http://actual-dashboard-browserless:3000" Mode="" Description="Internal URL of the browserless container for PDF rendering." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-dashboard-browserless:3000</Config>
   <Config Name="Browserless Token" Target="BROWSERLESS_TOKEN" Default="" Mode="" Description="Shared secret token for the browserless container. Must match the token set on actual-dashboard-browserless." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="PDF Render Base URL" Target="PDF_RENDER_BASE_URL" Default="http://actual-dashboard:3000" Mode="" Description="URL browserless uses to fetch the dashboard. Use the container name." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-dashboard:3000</Config>
+  <Config Name="PDF Render Auth Token" Target="PDF_RENDER_AUTH_TOKEN" Default="" Mode="" Description="Secret that lets the headless browser read the dashboard without logging in. Required for PDF and email. Use a long random string — anyone holding it can read your dashboard." Type="Variable" Display="always" Required="false" Mask="true"></Config>
 
   <Config Name="Resend API Key" Target="RESEND_API_KEY" Default="" Mode="" Description="Optional. Resend API key for outbound email reports and sync alerts." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="Email From" Target="EMAIL_FROM" Default="" Mode="" Description="Verified sender address, e.g. dashboard@yourdomain.com" Type="Variable" Display="always" Required="false" Mask="false"></Config>
@@ -36,4 +40,6 @@
   <Config Name="Sync Cron" Target="SYNC_CRON" Default="" Mode="" Description="Cron expression for automatic syncs, e.g. '0 */6 * * *' for every 6 hours. Empty disables." Type="Variable" Display="always" Required="false" Mask="false"></Config>
   <Config Name="Email Cron" Target="EMAIL_CRON" Default="" Mode="" Description="Cron expression for monthly email report, e.g. '0 8 1 * *' for 1st of month at 8am. Empty disables." Type="Variable" Display="always" Required="false" Mask="false"></Config>
   <Config Name="Cron Timezone" Target="CRON_TIMEZONE" Default="America/New_York" Mode="" Description="Timezone for all cron schedules." Type="Variable" Display="always" Required="false" Mask="false">America/New_York</Config>
+
+  <Config Name="Trusted Proxy" Target="TRUSTED_PROXY" Default="" Mode="" Description="Set only when a reverse proxy in front of the dashboard rewrites X-Forwarded-For. Leave empty when nothing fronts it: the header is then ignored, so a client cannot spoof it to get past login rate limiting." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>

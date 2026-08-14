@@ -1,5 +1,6 @@
 const fs = require("node:fs");
-const path = require("node:path");
+
+const { resolveConfigSource } = require("./configSource.cjs");
 
 /**
  * Loads the dashboard config.
@@ -9,26 +10,29 @@ const path = require("node:path");
  * the repo. config/dashboard.example.json is tracked and acts as the fallback
  * so a fresh clone (and the test suite) boots without any setup.
  *
- * Resolution order: $DASHBOARD_CONFIG, then config/dashboard.json, then
- * config/dashboard.example.json — all relative to the process working
- * directory, which is the app root both locally and in the container.
+ * Resolution order lives in resolveConfigSource.cjs, which is also what the
+ * admin page reads to report which file won. Keeping one copy matters: the
+ * container silently ran on the example file for months because nothing
+ * surfaced the fallback, so the fallback now warns.
  *
  * Shared by the Next server code (src/lib/constants.ts) and the CJS scripts.
+ *
+ * @param {{cwd?: string, env?: Record<string, string | undefined>}} [options]
  */
-function loadConfig() {
-  const candidates = [
-    process.env.DASHBOARD_CONFIG,
-    path.join(process.cwd(), "config", "dashboard.json"),
-    path.join(process.cwd(), "config", "dashboard.example.json"),
-  ].filter(Boolean);
+function loadConfig(options = {}) {
+  const source = resolveConfigSource(options);
 
-  for (const file of candidates) {
-    if (fs.existsSync(file)) {
-      return JSON.parse(fs.readFileSync(file, "utf8"));
-    }
+  if (source.isExample) {
+    console.warn(
+      `[config] No household config found — falling back to ${source.path}. ` +
+        `Account and category filters will not match your data. ` +
+        `Set DASHBOARD_CONFIG_JSON or DASHBOARD_CONFIG.`
+    );
   }
 
-  throw new Error(`No dashboard config found. Looked in: ${candidates.join(", ")}`);
+  return source.path === null
+    ? JSON.parse(source.contents)
+    : JSON.parse(fs.readFileSync(source.path, "utf8"));
 }
 
 module.exports = { loadConfig };

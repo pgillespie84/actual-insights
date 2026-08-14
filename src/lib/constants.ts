@@ -1,6 +1,7 @@
 import { loadConfig } from "./loadConfig.cjs";
+import { resolveConfigSource } from "./configSource.cjs";
 
-interface DashboardConfig {
+export interface DashboardConfig {
   HOUSEHOLD_NAMES: string;
   SKIP_CATEGORIES: string[];
   SKIP_INCOME: string[];
@@ -11,6 +12,18 @@ interface DashboardConfig {
 }
 
 const config: DashboardConfig = loadConfig();
+
+export const CONFIG = config;
+
+/**
+ * Which file (or env var) the config came from, and whether it is the tracked
+ * placeholder. The dashboard shows a banner when it is: running on the example
+ * means every account and category filter below matches nothing real.
+ */
+export const CONFIG_SOURCE: { path: string | null; isExample: boolean } = (() => {
+  const { path, isExample } = resolveConfigSource();
+  return { path, isExample };
+})();
 
 export const SKIP_CATEGORIES: string[] = config.SKIP_CATEGORIES;
 
