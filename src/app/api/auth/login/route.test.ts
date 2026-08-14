@@ -54,8 +54,15 @@ test("a wrong password is rejected", async () => {
 // gated the route returns before recordLoginFailure, so the counter stops
 // growing, and it drains back under the ceiling within 45 seconds.
 test("a correct password is still refused while the global ceiling is active", async () => {
-  // 20 distinct keys, one failure each: no per-key lockout, ceiling reached.
-  for (let i = 0; i < 20; i++) recordLoginFailure(`198.51.100.${i}`);
+  // 21 distinct keys, one failure each: no per-key lockout, ceiling passed.
+  //
+  // 21 rather than 20 because the global counter drains from the moment the
+  // last failure is recorded, so exactly 20 gates only while zero time has
+  // elapsed — this test then needed the loop and the request to land in the
+  // same millisecond, and failed about two full-suite runs in three. One extra
+  // failure buys a full 45-second drain interval of margin. The boundary itself
+  // is pinned in src/lib/loginRateLimit.test.ts.
+  for (let i = 0; i <= 20; i++) recordLoginFailure(`198.51.100.${i}`);
 
   const res = await POST(loginRequest("correct-horse", "203.0.113.99"));
 
