@@ -83,6 +83,33 @@ test("many distinct keys cannot exceed the global failure ceiling", () => {
   expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
 });
 
+// Characterisation, and the reason the route test uses 21 failures rather than
+// 20. The ceiling is `drained >= GLOBAL_MAX_FAILURES`, and the drain starts the
+// instant the last failure is recorded, so exactly 20 failures gates only while
+// no time at all has passed. A millisecond later the count is 19.99998 and the
+// gate is open again. In practice the ceiling bites at 21.
+//
+// Nothing to fix in the limiter — one failure of slack at the boundary is
+// immaterial to the control. But a test that records 20 and then makes a real
+// request is asking both to land in the same millisecond, which is why the
+// route test failed about two full-suite runs in three and passed alone.
+test("exactly the ceiling gates only at the same instant", () => {
+  const now = Date.now();
+  for (let i = 0; i < GLOBAL_MAX_FAILURES; i++) recordLoginFailure(`198.51.100.${i}`, now);
+
+  expect(checkLoginAllowed("203.0.113.77", now).allowed).toBe(false);
+  expect(checkLoginAllowed("203.0.113.77", now + 1).allowed).toBe(true);
+});
+
+test("one failure past the ceiling gates for a usable span", () => {
+  const now = Date.now();
+  for (let i = 0; i <= GLOBAL_MAX_FAILURES; i++) recordLoginFailure(`198.51.100.${i}`, now);
+
+  // A whole drain interval of margin, so no test needs to race the clock.
+  expect(checkLoginAllowed("203.0.113.77", now + 1).allowed).toBe(false);
+  expect(checkLoginAllowed("203.0.113.77", now + 44_000).allowed).toBe(false);
+});
+
 // A success used to zero the global counter outright, which handed an attacker
 // a fresh budget every time a household member signed in. It now forgives a
 // bounded amount instead, so a legitimate login relieves pressure without

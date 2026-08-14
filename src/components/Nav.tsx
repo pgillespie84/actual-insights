@@ -9,6 +9,7 @@ const links = [
   { href: "/budget", label: "Budget" },
   { href: "/trends", label: "Trends" },
   { href: "/analytics", label: "Analytics" },
+  { href: "/admin", label: "Admin" },
 ];
 
 export function Nav() {
