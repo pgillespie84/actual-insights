@@ -24,6 +24,7 @@ import type {
   getInvestmentsMetric,
   getLastSync,
   getLatestInsight,
+  getMonthCashFlow,
   getMonthlySpendingTrend,
   getNetWorth,
   getSavingsMetric,
@@ -64,7 +65,10 @@ export type AccuracyCategory = Element<Returns<typeof getBudgetAccuracy>>;
 
 export interface DashboardResponse {
   monthKey: string;
+  /** From HOUSEHOLD_NAMES. The client cannot read the config file itself. */
+  household: string;
   dailySpending: Returns<typeof getDailySpending>;
+  cashFlow: Returns<typeof getMonthCashFlow>;
   topPayees: Returns<typeof getTopPayees>;
   lastSync: Returns<typeof getLastSync>;
   availableMonths: Returns<typeof getAvailableMonths>;
