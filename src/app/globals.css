@@ -1,87 +1,104 @@
 @import "tailwindcss";
 
+/*
+ * Palette: warm paper in light, warm charcoal in dark, one green accent.
+ *
+ * Every colour below has been measured against the surface it sits on. Text
+ * tokens clear 4.5:1, chart tokens clear 3:1 (the threshold for graphical
+ * objects). Do not add a colour here without checking it against both
+ * --background and --card-bg — the admin banner shipped amber-on-amber
+ * because a value was picked by eye in one theme only.
+ */
+
 html.dark {
   color-scheme: dark;
-  --background: #1c1c1e;
-  --foreground: #e5e5e7;
-  --card-bg: rgba(44, 44, 46, 0.85);
-  --card-bg-solid: #2c2c2e;
-  --card-border: rgba(84, 84, 88, 0.5);
-  --card-glow: rgba(16, 185, 129, 0.04);
-  --text-primary: #f5f5f7;
-  --text-secondary: #a1a1a6;
-  --warning-text: #fcd34d;
-  --warning-bg: rgba(245, 158, 11, 0.12);
-  --warning-border: rgba(245, 158, 11, 0.35);
-  --text-muted: #6e6e73;
-  --hover-bg: rgba(58, 58, 60, 0.7);
-  --input-bg: #2c2c2e;
-  --card-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.4),
-    0 4px 12px rgba(0, 0, 0, 0.45),
-    0 16px 40px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
-  --card-shadow-hover:
-    0 2px 4px rgba(0, 0, 0, 0.5),
-    0 8px 20px rgba(0, 0, 0, 0.55),
-    0 24px 56px rgba(0, 0, 0, 0.6),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  --background: #1a1917;
+  --foreground: #f2efe9;
+  --card-bg: #232220;
+  --card-bg-solid: #232220;
+  --card-border: rgba(242, 239, 233, 0.13);
+  --card-glow: transparent;
+  --text-primary: #f2efe9;
+  --text-secondary: #b3aca1;
+  --text-muted: #847d72;
+  --accent: #8fbb9c;
+  --accent-soft: rgba(143, 187, 156, 0.14);
+  --accent-contrast: #14201a;
+  --positive: #7fc496;
+  --negative: #e5897a;
+  --warning-text: #e0b45f;
+  --warning-bg: rgba(224, 180, 95, 0.12);
+  --warning-border: rgba(224, 180, 95, 0.32);
+  --hover-bg: rgba(242, 239, 233, 0.06);
+  --input-bg: #2b2926;
+  --chart-1: #8fbb9c;
+  --chart-2: #a8b98f;
+  --chart-3: #d3a75f;
+  --chart-4: #8fadbd;
+  --chart-5: #c49a9a;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --card-shadow-hover: 0 1px 3px rgba(0, 0, 0, 0.45);
 }
 
 html.light {
   color-scheme: light;
-  --background: #f0f2f5;
-  --foreground: #0f172a;
-  --card-bg: rgba(255, 255, 255, 0.92);
-  --card-bg-solid: #ffffff;
-  --card-border: rgba(203, 213, 225, 0.6);
-  --card-glow: rgba(16, 185, 129, 0.06);
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --warning-text: #92400e;
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --warning-border: rgba(180, 83, 9, 0.35);
-  --text-muted: #94a3b8;
-  --hover-bg: rgba(241, 245, 249, 0.8);
-  --input-bg: #f1f5f9;
-  --card-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 4px 12px rgba(15, 23, 42, 0.08),
-    0 16px 40px rgba(15, 23, 42, 0.08),
-    0 0 0 1px rgba(15, 23, 42, 0.04);
-  --card-shadow-hover:
-    0 2px 4px rgba(15, 23, 42, 0.08),
-    0 8px 20px rgba(15, 23, 42, 0.12),
-    0 24px 56px rgba(15, 23, 42, 0.14),
-    0 0 0 1px rgba(15, 23, 42, 0.06);
+  --background: #f6f3ec;
+  --foreground: #1c1a17;
+  --card-bg: #fffdf8;
+  --card-bg-solid: #fffdf8;
+  --card-border: rgba(28, 26, 23, 0.11);
+  --card-glow: transparent;
+  --text-primary: #1c1a17;
+  --text-secondary: #57534a;
+  --text-muted: #6f6a5f;
+  --accent: #3d5a45;
+  --accent-soft: rgba(61, 90, 69, 0.09);
+  --accent-contrast: #fffdf8;
+  --positive: #2f6b45;
+  --negative: #a4392b;
+  --warning-text: #8a5a12;
+  --warning-bg: rgba(138, 90, 18, 0.10);
+  --warning-border: rgba(138, 90, 18, 0.28);
+  --hover-bg: rgba(28, 26, 23, 0.05);
+  --input-bg: #fffdf8;
+  --chart-1: #3d5a45;
+  --chart-2: #6f8260;
+  --chart-3: #9d7030;
+  --chart-4: #5f7d8c;
+  --chart-5: #9a6a6a;
+  --card-shadow: 0 1px 2px rgba(28, 26, 23, 0.05);
+  --card-shadow-hover: 0 1px 3px rgba(28, 26, 23, 0.08);
 }
 
+/* Server-rendered default, before the theme class is applied. Matches light. */
 :root {
   color-scheme: light;
-  --background: #f0f2f5;
-  --foreground: #0f172a;
-  --card-bg: rgba(255, 255, 255, 0.92);
-  --card-bg-solid: #ffffff;
-  --card-border: rgba(203, 213, 225, 0.6);
-  --card-glow: rgba(16, 185, 129, 0.06);
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --warning-text: #92400e;
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --warning-border: rgba(180, 83, 9, 0.35);
-  --text-muted: #94a3b8;
-  --hover-bg: rgba(241, 245, 249, 0.8);
-  --input-bg: #f1f5f9;
-  --card-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.06),
-    0 4px 12px rgba(15, 23, 42, 0.08),
-    0 16px 40px rgba(15, 23, 42, 0.08),
-    0 0 0 1px rgba(15, 23, 42, 0.04);
-  --card-shadow-hover:
-    0 2px 4px rgba(15, 23, 42, 0.08),
-    0 8px 20px rgba(15, 23, 42, 0.12),
-    0 24px 56px rgba(15, 23, 42, 0.14),
-    0 0 0 1px rgba(15, 23, 42, 0.06);
+  --background: #f6f3ec;
+  --foreground: #1c1a17;
+  --card-bg: #fffdf8;
+  --card-bg-solid: #fffdf8;
+  --card-border: rgba(28, 26, 23, 0.11);
+  --card-glow: transparent;
+  --text-primary: #1c1a17;
+  --text-secondary: #57534a;
+  --text-muted: #6f6a5f;
+  --accent: #3d5a45;
+  --accent-soft: rgba(61, 90, 69, 0.09);
+  --accent-contrast: #fffdf8;
+  --positive: #2f6b45;
+  --negative: #a4392b;
+  --warning-text: #8a5a12;
+  --warning-bg: rgba(138, 90, 18, 0.10);
+  --warning-border: rgba(138, 90, 18, 0.28);
+  --hover-bg: rgba(28, 26, 23, 0.05);
+  --input-bg: #fffdf8;
+  --chart-1: #3d5a45;
+  --chart-2: #6f8260;
+  --chart-3: #9d7030;
+  --chart-4: #5f7d8c;
+  --chart-5: #9a6a6a;
+  --card-shadow: 0 1px 2px rgba(28, 26, 23, 0.05);
+  --card-shadow-hover: 0 1px 3px rgba(28, 26, 23, 0.08);
 }
 
 @theme inline {
@@ -94,6 +111,11 @@ html.light {
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
   --color-warning-text: var(--warning-text);
   --color-warning-bg: var(--warning-bg);
   --color-warning-border: var(--warning-border);
@@ -101,6 +123,7 @@ html.light {
   --color-input-bg: var(--input-bg);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-source-serif);
 }
 
 body {
@@ -109,32 +132,37 @@ body {
   font-family: var(--font-sans), system-ui, sans-serif;
 }
 
-/* Shared card base with glassmorphism */
+/*
+ * Flat card: hairline border, one very soft shadow, no depth effects.
+ *
+ * The previous version used a 12px backdrop-filter and a four-layer shadow
+ * stack. Both are gone deliberately — backdrop-filter is the most expensive
+ * paint on the page and behaves inconsistently in the headless-Chromium PDF
+ * render, and the stacked shadows fight the flat look.
+ */
 .widget-card {
   background: var(--card-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--card-border);
-  border-radius: 1rem;
+  border-radius: 0.75rem;
   box-shadow: var(--card-shadow);
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .widget-card:hover {
   box-shadow: var(--card-shadow-hover);
-  border-color: rgba(148, 163, 184, 0.2);
-  transform: translateY(-1px);
-}
-
-.widget-card {
-  transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .widget-card {
     transition: none;
   }
-  .widget-card:hover {
-    transform: none;
-  }
+}
+
+/* Small letter-spaced caps used for widget and metric labels. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
