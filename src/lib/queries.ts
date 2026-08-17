@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
-import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, getSavingsAccountNames, getNonMortgageDebtAccountNames, getInvestmentAccountNames } from "./constants";
-import { getBalanceDelta } from "./accountSnapshots";
+import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
+import { getBalanceAt, getBalanceDelta } from "./accountSnapshots";
 import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
 import { startOfMonth, endOfMonth, format, subMonths } from "date-fns";
@@ -573,56 +573,109 @@ export async function getCategorySpotlight(monthDate: Date, categoryNames?: stri
   });
 }
 
-export async function getSavingsMetric(monthKey: string): Promise<{ monthDelta: number; ytdDelta: number }> {
-  const monthDate = parse(monthKey, "yyyy-MM", new Date());
-  const monthStart = startOfMonth(monthDate);
-  const monthEnd = endOfMonth(monthDate);
-  const yearStart = startOfYear(monthDate);
-
-  const savingsNames = getSavingsAccountNames();
-  const accounts = await prisma.account.findMany({
-    where: { name: { in: savingsNames } },
-    select: { id: true },
-  });
-  const accountIds = accounts.map((a) => a.id);
-  if (accountIds.length === 0) {
-    return { monthDelta: 0, ytdDelta: 0 };
-  }
-
-  const [monthDelta, ytdDelta] = await Promise.all([
-    getBalanceDelta(accountIds, monthStart, monthEnd),
-    getBalanceDelta(accountIds, yearStart, monthEnd),
-  ]);
-
-  return { monthDelta, ytdDelta };
+export interface BalanceMetric {
+  /** Null when no account in the group has a snapshot for the month. */
+  balance: number | null;
+  monthDelta: number;
+  ytdDelta: number;
 }
 
-export async function getDebtMetric(monthKey: string): Promise<{ monthDelta: number; ytdDelta: number }> {
+/**
+ * Headline balance and deltas for one group of accounts, in the month being
+ * viewed.
+ *
+ * The balance comes from two different places on purpose. The current month
+ * uses the live `Account.balance` the last sync wrote, so the figure matches
+ * what Actual itself shows. Any past month uses the end-of-month snapshot, so
+ * the balance and the delta printed beside it describe the same date — showing
+ * today's balance next to March's movement would be two numbers from two
+ * dates in one box.
+ */
+async function accountBalanceMetric(
+  names: string[],
+  monthKey: string,
+): Promise<BalanceMetric> {
   const monthDate = parse(monthKey, "yyyy-MM", new Date());
   const monthStart = startOfMonth(monthDate);
   const monthEnd = endOfMonth(monthDate);
   const yearStart = startOfYear(monthDate);
 
-  const debtNames = getNonMortgageDebtAccountNames();
   const accounts = await prisma.account.findMany({
-    where: { name: { in: debtNames } },
-    select: { id: true },
+    where: { name: { in: names } },
+    select: { id: true, balance: true },
   });
-  const accountIds = accounts.map((a) => a.id);
-  if (accountIds.length === 0) {
-    return { monthDelta: 0, ytdDelta: 0 };
+  if (accounts.length === 0) {
+    return { balance: null, monthDelta: 0, ytdDelta: 0 };
   }
 
-  const [rawMonthDelta, rawYtdDelta] = await Promise.all([
+  const accountIds = accounts.map((a) => a.id);
+  const isCurrentMonth = monthKey === getCurrentMonthKeyET();
+
+  const [monthDelta, ytdDelta, snapshotBalance] = await Promise.all([
     getBalanceDelta(accountIds, monthStart, monthEnd),
     getBalanceDelta(accountIds, yearStart, monthEnd),
+    isCurrentMonth ? Promise.resolve(null) : getBalanceAt(accountIds, monthEnd),
   ]);
+
+  const balance = isCurrentMonth
+    ? accounts.reduce((sum, a) => sum + a.balance, 0)
+    : snapshotBalance;
+
+  return { balance, monthDelta, ytdDelta };
+}
+
+export async function getSavingsMetric(monthKey: string): Promise<BalanceMetric> {
+  return accountBalanceMetric(getSavingsAccountNames(), monthKey);
+}
+
+export async function getDebtMetric(monthKey: string): Promise<BalanceMetric> {
+  const { balance, monthDelta, ytdDelta } = await accountBalanceMetric(
+    getPayableDebtAccountNames(),
+    monthKey,
+  );
 
   // Debt balances are negative (liabilities). A raw delta of +1000 means
   // the balance went from e.g. -10000 to -9000, i.e. $1000 was paid down.
   // We negate so that a positive result = debt paid down (good) and
-  // a negative result = new debt added (bad).
-  return { monthDelta: -rawMonthDelta, ytdDelta: -rawYtdDelta };
+  // a negative result = new debt added (bad). The balance is reported as the
+  // amount owed, matching how getNetWorth sums totalDebt.
+  return {
+    balance: balance === null ? null : Math.abs(balance),
+    monthDelta: -monthDelta,
+    ytdDelta: -ytdDelta,
+  };
+}
+
+/**
+ * Income minus expenses for one month, in cents.
+ *
+ * Same definitions `getCashFlowTrends` uses for its bars, scoped to a single
+ * month: income is every transaction in an income category, expenses is every
+ * transaction passing `expenseCategoryFilter()`. Transfers between accounts
+ * carry no category and so appear in neither.
+ */
+export async function getMonthCashFlow(monthDate: Date): Promise<{
+  income: number;
+  expenses: number;
+  net: number;
+}> {
+  const { start, end } = generateMonthRange(1, monthDate)[0];
+
+  const [incomeResult, expenseResult] = await Promise.all([
+    prisma.transaction.aggregate({
+      where: { date: { gte: start, lte: end }, category: { isIncome: true } },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.aggregate({
+      where: { date: { gte: start, lte: end }, category: catFilter },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const income = Math.abs(incomeResult._sum.amount || 0);
+  const expenses = Math.abs(expenseResult._sum.amount || 0);
+
+  return { income, expenses, net: income - expenses };
 }
 
 export async function getInvestmentsMetric(monthKey: string): Promise<{

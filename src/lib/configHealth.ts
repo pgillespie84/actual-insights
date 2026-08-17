@@ -16,12 +16,13 @@ export type ProblemKind =
   | "missing-required-group";
 
 /**
- * constants.ts indexes these four keys directly and spreads the result, so a
- * config without one of them throws at import rather than degrading.
+ * constants.ts indexes these keys directly and spreads the result, so a config
+ * without one of them throws at import rather than degrading.
  */
 const REQUIRED_NET_WORTH_GROUPS = [
   "Savings",
   "Debt — Loans",
+  "Debt — Credit Cards",
   "Retirement",
   "Taxable Investments",
 ];
