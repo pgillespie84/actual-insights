@@ -47,6 +47,49 @@ export function sumBalanceDeltas(
 }
 
 /**
+ * Total balance across the given accounts, in cents, or null when not one of
+ * them has a snapshot.
+ *
+ * Missing accounts are skipped rather than counted as zero, which matches
+ * `sumBalanceDeltas` and means an account that did not exist yet in the month
+ * being viewed does not drag the total down. Null and zero are kept apart on
+ * purpose: the card renders null as an em dash, and rendering it as $0.00
+ * would be a confident wrong number on a month whose history was never
+ * backfilled.
+ */
+export function sumBalances(
+  accountIds: string[],
+  balances: Map<string, number>
+): number | null {
+  let total = 0;
+  let known = 0;
+  for (const accountId of accountIds) {
+    const balance = balances.get(accountId);
+    if (balance === undefined) continue;
+    total += balance;
+    known += 1;
+  }
+  return known === 0 ? null : total;
+}
+
+/**
+ * Total balance across the given accounts at a point in time, forward-filled
+ * from the last snapshot on or before that date.
+ *
+ * One query, same `DISTINCT ON` shape `getBalanceDelta` uses for each of its
+ * two boundaries.
+ */
+export async function getBalanceAt(
+  accountIds: string[],
+  date: Date
+): Promise<number | null> {
+  if (accountIds.length === 0) return null;
+
+  const balances = await balancesOnOrBefore(accountIds, date);
+  return sumBalances(accountIds, balances);
+}
+
+/**
  * Two queries regardless of account count. This previously ran two queries per
  * account, which cost roughly 240 round trips per dashboard load.
  */

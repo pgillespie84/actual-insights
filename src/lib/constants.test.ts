@@ -8,6 +8,7 @@ import {
   EXCLUDED_ACCOUNTS,
   getSavingsAccountNames,
   getNonMortgageDebtAccountNames,
+  getPayableDebtAccountNames,
   getInvestmentAccountNames,
   NET_WORTH_GROUPS,
 } from "./constants.ts";
@@ -33,6 +34,7 @@ const REQUIRED_NET_WORTH_GROUPS = [
   "Retirement",
   "Taxable Investments",
   "Debt — Loans",
+  "Debt — Credit Cards",
 ];
 
 test("loaded config has every required key", () => {
@@ -82,4 +84,20 @@ test("getInvestmentAccountNames combines Retirement and Taxable Investments", ()
     ...NET_WORTH_GROUPS["Retirement"],
     ...NET_WORTH_GROUPS["Taxable Investments"],
   ]);
+});
+
+test("getPayableDebtAccountNames combines Loans and Credit Cards", () => {
+  expect(getPayableDebtAccountNames()).toEqual([
+    ...NET_WORTH_GROUPS["Debt — Loans"],
+    ...NET_WORTH_GROUPS["Debt — Credit Cards"],
+  ]);
+});
+
+// The mortgage is deliberately absent: a 30-year balance moving a few hundred
+// dollars a month swamps the number the debt card exists to show.
+test("getPayableDebtAccountNames excludes the mortgage", () => {
+  const mortgages = NET_WORTH_GROUPS["Debt — Mortgage"];
+  for (const name of mortgages) {
+    expect(getPayableDebtAccountNames()).not.toContain(name);
+  }
 });

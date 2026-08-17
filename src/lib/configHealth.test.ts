@@ -11,10 +11,11 @@ const db = {
   groupNames: ["Food", "Housing"],
 };
 
-/** The four keys constants.ts indexes by hand, so tests isolate one rule. */
+/** The keys constants.ts indexes by hand, so tests isolate one rule. */
 const requiredGroups = {
   Savings: [],
   "Debt — Loans": [],
+  "Debt — Credit Cards": [],
   Retirement: [],
   "Taxable Investments": [],
 };
@@ -73,15 +74,20 @@ test("every other name-matched setting is checked against its own table", () => 
 
 test("a NET_WORTH_GROUPS key the code indexes by hand is required", () => {
   // constants.ts reads NET_WORTH_GROUPS["Savings"], ["Debt — Loans"],
-  // ["Retirement"] and ["Taxable Investments"] by exact key and spreads the
-  // result. A missing key spreads undefined and throws, so this one takes the
-  // dashboard down rather than skewing it.
+  // ["Debt — Credit Cards"], ["Retirement"] and ["Taxable Investments"] by
+  // exact key and spreads the result. A missing key spreads undefined and
+  // throws, so this one takes the dashboard down rather than skewing it.
   const problems = checkConfigHealth(
     { NET_WORTH_GROUPS: { Savings: [], "Debt — Loans": [], Retirement: [] } },
     db,
   );
 
   expect(problems).toEqual([
+    {
+      setting: "NET_WORTH_GROUPS",
+      value: "Debt — Credit Cards",
+      kind: "missing-required-group",
+    },
     {
       setting: "NET_WORTH_GROUPS",
       value: "Taxable Investments",

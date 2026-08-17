@@ -50,6 +50,20 @@ export function getNonMortgageDebtAccountNames(): string[] {
   return NET_WORTH_GROUPS["Debt — Loans"];
 }
 
+/**
+ * Debt you can actually pay down month to month: loans and credit cards.
+ *
+ * The mortgage is excluded deliberately. A 30-year balance moving a few
+ * hundred dollars a month swamps the signal the debt metric exists to show,
+ * and it never changes a decision.
+ */
+export function getPayableDebtAccountNames(): string[] {
+  return [
+    ...NET_WORTH_GROUPS["Debt — Loans"],
+    ...NET_WORTH_GROUPS["Debt — Credit Cards"],
+  ];
+}
+
 export function getInvestmentAccountNames(): string[] {
   return [
     ...NET_WORTH_GROUPS["Retirement"],
