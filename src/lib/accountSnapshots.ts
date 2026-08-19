@@ -42,6 +42,26 @@ export interface BalanceCoverage {
 }
 
 /**
+ * Whether every configured account name matched a real account.
+ *
+ * The other coverage in this module counts accounts that were found. This
+ * counts the ones that were asked for, which is a different failure: a name in
+ * the config matching no row means the group is short an account before any
+ * snapshot question is asked, and counting only the rows that matched makes
+ * that case look complete.
+ *
+ * Compares sets rather than lengths, since a name can repeat in the config and
+ * two accounts can share a name.
+ */
+export function coversEveryName(
+  configured: string[],
+  matched: string[]
+): boolean {
+  const found = new Set(matched);
+  return configured.every((name) => found.has(name));
+}
+
+/**
  * Sum of (endBalance - startBalance) across the given accounts, in cents, with
  * coverage.
  *

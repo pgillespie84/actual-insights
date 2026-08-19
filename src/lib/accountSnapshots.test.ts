@@ -1,5 +1,9 @@
 import { test, expect } from "vitest";
-import { sumBalanceDeltas, sumBalances } from "./accountSnapshots.ts";
+import {
+  coversEveryName,
+  sumBalanceDeltas,
+  sumBalances,
+} from "./accountSnapshots.ts";
 
 // An account missing a snapshot at either boundary contributes 0 rather than
 // being treated as a balance of zero, which would report the whole of the other
@@ -86,4 +90,32 @@ test("an empty account list is fully covered rather than unknown", () => {
     known: 0,
     requested: 0,
   });
+});
+
+// Snapshot coverage is only half the question. A group can have perfect
+// snapshots for every account it found and still be missing accounts entirely,
+// because a configured name matches no row — the stale-config failure this
+// project has already had once. Counting only the rows that matched makes that
+// case look complete.
+test("coversEveryName is false when a configured name matched nothing", () => {
+  expect(coversEveryName(["General", "Long Term", "Short Term"], ["General", "Long Term"]))
+    .toBe(false);
+});
+
+test("coversEveryName is true when every configured name matched", () => {
+  expect(coversEveryName(["General", "Long Term"], ["Long Term", "General"])).toBe(true);
+});
+
+// Set comparison, not a length check: two accounts may share a name, and a
+// name may repeat in the config.
+test("coversEveryName ignores duplicate matches on the same name", () => {
+  expect(coversEveryName(["General"], ["General", "General"])).toBe(true);
+});
+
+test("coversEveryName ignores duplicates in the configured list", () => {
+  expect(coversEveryName(["General", "General"], ["General"])).toBe(true);
+});
+
+test("coversEveryName is true for an empty configured list", () => {
+  expect(coversEveryName([], [])).toBe(true);
 });

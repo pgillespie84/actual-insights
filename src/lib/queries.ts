@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
-import { getBalanceAt, getBalanceDelta } from "./accountSnapshots";
+import { coversEveryName, getBalanceAt, getBalanceDelta } from "./accountSnapshots";
 import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
 import { startOfMonth, endOfMonth, format, subMonths } from "date-fns";
@@ -584,9 +584,13 @@ export interface BalanceMetric {
   monthDelta: number | null;
   ytdDelta: number | null;
   /**
-   * True when some but not all accounts in the group had the history needed,
-   * so the figures are real but cover less than the group. Without this the
-   * card would print one account's movement as if it were all five.
+   * True when the balance or the month movement covers less than the whole
+   * configured group — either because an account lacks the snapshots needed,
+   * or because a configured name matched no account at all. Without this the
+   * card would print one account's figure as if it were all five.
+   *
+   * Describes `balance` and `monthDelta` only. `ytdDelta` has its own coverage,
+   * which is not tracked here because nothing renders it.
    */
   partial: boolean;
   /**
@@ -619,7 +623,7 @@ async function accountBalanceMetric(
 
   const accounts = await prisma.account.findMany({
     where: { name: { in: names } },
-    select: { id: true, balance: true },
+    select: { id: true, name: true, balance: true },
   });
   if (accounts.length === 0) {
     return {
@@ -655,11 +659,19 @@ async function accountBalanceMetric(
     : snapshot!.known > 0 && snapshot!.known < snapshot!.requested;
   const monthPartial = month.known > 0 && month.known < month.requested;
 
+  // Snapshot coverage is measured against the accounts that were found, so a
+  // configured name matching no row would otherwise read as fully covered —
+  // the same wrong number one layer up from the one this flag exists to catch.
+  const namesPartial = !coversEveryName(
+    names,
+    accounts.map((a) => a.name),
+  );
+
   return {
     balance,
     monthDelta: month.known === 0 ? null : month.total,
     ytdDelta: ytd.known === 0 ? null : ytd.total,
-    partial: balancePartial || monthPartial,
+    partial: balancePartial || monthPartial || namesPartial,
     hasAccounts: true,
   };
 }
