@@ -583,6 +583,18 @@ export interface BalanceMetric {
    */
   monthDelta: number | null;
   ytdDelta: number | null;
+  /**
+   * True when some but not all accounts in the group had the history needed,
+   * so the figures are real but cover less than the group. Without this the
+   * card would print one account's movement as if it were all five.
+   */
+  partial: boolean;
+  /**
+   * False when the configured account names matched nothing in the database.
+   * A different problem from missing history, and a different fix: the names
+   * in the config, not a snapshot backfill.
+   */
+  hasAccounts: boolean;
 }
 
 /**
@@ -610,23 +622,46 @@ async function accountBalanceMetric(
     select: { id: true, balance: true },
   });
   if (accounts.length === 0) {
-    return { balance: null, monthDelta: null, ytdDelta: null };
+    return {
+      balance: null,
+      monthDelta: null,
+      ytdDelta: null,
+      partial: false,
+      hasAccounts: false,
+    };
   }
 
   const accountIds = accounts.map((a) => a.id);
   const isCurrentMonth = monthKey === getCurrentMonthKeyET();
 
-  const [monthDelta, ytdDelta, snapshotBalance] = await Promise.all([
+  const [month, ytd, snapshot] = await Promise.all([
     getBalanceDelta(accountIds, monthStart, monthEnd),
     getBalanceDelta(accountIds, yearStart, monthEnd),
-    isCurrentMonth ? Promise.resolve(null) : getBalanceAt(accountIds, monthEnd),
+    isCurrentMonth
+      ? Promise.resolve(null)
+      : getBalanceAt(accountIds, monthEnd),
   ]);
 
+  // The live balance covers every account by definition; a snapshot balance
+  // only covers the accounts that have one.
   const balance = isCurrentMonth
     ? accounts.reduce((sum, a) => sum + a.balance, 0)
-    : snapshotBalance;
+    : snapshot!.known === 0
+      ? null
+      : snapshot!.total;
 
-  return { balance, monthDelta, ytdDelta };
+  const balancePartial = isCurrentMonth
+    ? false
+    : snapshot!.known > 0 && snapshot!.known < snapshot!.requested;
+  const monthPartial = month.known > 0 && month.known < month.requested;
+
+  return {
+    balance,
+    monthDelta: month.known === 0 ? null : month.total,
+    ytdDelta: ytd.known === 0 ? null : ytd.total,
+    partial: balancePartial || monthPartial,
+    hasAccounts: true,
+  };
 }
 
 export async function getSavingsMetric(monthKey: string): Promise<BalanceMetric> {
@@ -634,7 +669,7 @@ export async function getSavingsMetric(monthKey: string): Promise<BalanceMetric>
 }
 
 export async function getDebtMetric(monthKey: string): Promise<BalanceMetric> {
-  const { balance, monthDelta, ytdDelta } = await accountBalanceMetric(
+  const { balance, monthDelta, ytdDelta, ...rest } = await accountBalanceMetric(
     getPayableDebtAccountNames(),
     monthKey,
   );
@@ -645,6 +680,7 @@ export async function getDebtMetric(monthKey: string): Promise<BalanceMetric> {
   // a negative result = new debt added (bad). The balance is reported as the
   // amount owed, matching how getNetWorth sums totalDebt.
   return {
+    ...rest,
     balance: balance === null ? null : Math.abs(balance),
     monthDelta: monthDelta === null ? null : -monthDelta,
     ytdDelta: ytdDelta === null ? null : -ytdDelta,
@@ -684,10 +720,11 @@ export async function getMonthCashFlow(monthDate: Date): Promise<{
 }
 
 export async function getInvestmentsMetric(monthKey: string): Promise<{
-  monthDelta: number;
-  ytdDelta: number;
+  monthDelta: number | null;
+  ytdDelta: number | null;
   contributions: number;
-  growth: number;
+  /** Null when the movement is unknown, since growth cannot be derived. */
+  growth: number | null;
   trackingSince: string | null;
 }> {
   const monthDate = parse(monthKey, "yyyy-MM", new Date());
@@ -702,13 +739,21 @@ export async function getInvestmentsMetric(monthKey: string): Promise<{
   });
   const accountIds = accounts.map((a) => a.id);
   if (accountIds.length === 0) {
-    return { monthDelta: 0, ytdDelta: 0, contributions: 0, growth: 0, trackingSince: null };
+    return {
+      monthDelta: null,
+      ytdDelta: null,
+      contributions: 0,
+      growth: null,
+      trackingSince: null,
+    };
   }
 
-  const [monthDelta, ytdDelta] = await Promise.all([
+  const [month, ytd] = await Promise.all([
     getBalanceDelta(accountIds, monthStart, monthEnd),
     getBalanceDelta(accountIds, yearStart, monthEnd),
   ]);
+  const monthDelta = month.known === 0 ? null : month.total;
+  const ytdDelta = ytd.known === 0 ? null : ytd.total;
 
   // Contributions: sum of positive-amount (inbound) transactions to investment accounts this month.
   // Positive amounts represent money flowing into these accounts (transfers in).
@@ -721,9 +766,10 @@ export async function getInvestmentsMetric(monthKey: string): Promise<{
     _sum: { amount: true },
   });
   const contributions = contributionResult._sum.amount || 0;
-  // This widget is parked off the dashboard and keeps its old behaviour: an
-  // unknown movement reads as zero here. Worth revisiting when it comes back.
-  const growth = (monthDelta ?? 0) - contributions;
+  // Growth is the movement that contributions do not explain, so an unknown
+  // movement makes it unknown too. Coercing the null to zero here reported a
+  // loss exactly equal to whatever had been deposited.
+  const growth = monthDelta === null ? null : monthDelta - contributions;
 
   // Earliest snapshot date for any investment account
   const earliestSnapshot = await prisma.accountBalanceSnapshot.findFirst({
@@ -735,13 +781,7 @@ export async function getInvestmentsMetric(monthKey: string): Promise<{
     ? format(earliestSnapshot.date, "yyyy-MM-dd")
     : null;
 
-  return {
-    monthDelta: monthDelta ?? 0,
-    ytdDelta: ytdDelta ?? 0,
-    contributions,
-    growth,
-    trackingSince,
-  };
+  return { monthDelta, ytdDelta, contributions, growth, trackingSince };
 }
 
 export async function getNetWorth() {

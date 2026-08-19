@@ -1,8 +1,9 @@
 "use client";
 
 import { formatDollars, formatSignedDollars } from "@/lib/format";
+import type { Tone } from "@/lib/tone";
 
-export type Tone = "positive" | "negative" | "neutral";
+export type { Tone };
 
 interface MetricBanProps {
   label: string;

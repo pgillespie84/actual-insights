@@ -3,17 +3,20 @@
 import { formatCents } from "@/lib/format";
 
 interface InvestmentsMetricCardProps {
-  monthDelta: number;
-  ytdDelta: number;
+  monthDelta: number | null;
+  ytdDelta: number | null;
 }
 
-function signed(cents: number): string {
+function signed(cents: number | null): string {
+  // Null means no snapshot history for the period, which is not the same as
+  // no movement — see BalanceCoverage in accountSnapshots.ts.
+  if (cents === null) return "\u2014";
   const sign = cents >= 0 ? "+" : "\u2212";
   return `${sign}${formatCents(Math.abs(cents))}`;
 }
 
 export function InvestmentsMetricCard({ monthDelta, ytdDelta }: InvestmentsMetricCardProps) {
-  const isPositive = monthDelta >= 0;
+  const isPositive = monthDelta === null || monthDelta >= 0;
   const colorClass = isPositive ? "text-emerald-400" : "text-red-400";
 
   return (

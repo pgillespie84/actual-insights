@@ -9,7 +9,10 @@ const stubData = {
   previousLabel: "Apr",
 };
 
-test("card uses flex-col layout so chart fills available height", () => {
+// flex-col still matters, but not for the chart's height any more: it stacks
+// the title, the total and the chart. The chart itself is a fixed height, which
+// the test below pins.
+test("card stacks its title, total and chart in a column", () => {
   const { container } = render(<DailySpendingChart data={stubData} />);
   const card = container.firstElementChild as HTMLElement;
   expect(card.className).toMatch(/flex/);
@@ -25,6 +28,10 @@ test("chart container has an explicit height, not flex-1", () => {
   const { container } = render(<DailySpendingChart data={stubData} />);
   const card = container.firstElementChild as HTMLElement;
   const chartContainer = card.lastElementChild as HTMLElement;
-  expect(chartContainer.className).toMatch(/\bh-\d+\b/);
+  // Anchored on the whole class token deliberately: /\bh-\d+\b/ also matches
+  // min-h-0 and max-h-96, because the hyphen before the h is a word boundary.
+  // That would let a container classed min-h-0 alone pass while reproducing the
+  // exact zero-height bug this asserts against.
+  expect(chartContainer.className).toMatch(/(?:^|\s)h-\d+(?:\s|$)/);
   expect(chartContainer.className).not.toMatch(/flex-1/);
 });
