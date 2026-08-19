@@ -54,9 +54,9 @@ export function DailySpendingChart({ data }: { data: DailySpendingData }) {
   return (
     <div className="widget-card flex flex-col p-6">
       <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-text-primary">Spending</h2>
+        <h2 className="font-serif text-lg font-normal text-text-primary">Spending</h2>
       </div>
-      <p className="mb-1 text-2xl font-bold text-text-primary tracking-tight">
+      <p className="mb-1 text-2xl font-semibold tabular-nums tracking-tight text-text-primary">
         {formatCents(currentTotal)}
       </p>
       <p className="mb-4 text-xs text-text-muted">This month vs. last month</p>
@@ -65,8 +65,8 @@ export function DailySpendingChart({ data }: { data: DailySpendingData }) {
           <AreaChart data={trimmedData} margin={{ top: 5, right: 10, bottom: 0, left: -10 }}>
             <defs>
               <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f97316" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+                <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
               </linearGradient>
             </defs>
             <XAxis
@@ -95,11 +95,11 @@ export function DailySpendingChart({ data }: { data: DailySpendingData }) {
                 const hasCurrent = current != null;
                 const hasPrevious = previous != null;
                 const variance = hasCurrent && hasPrevious ? (current as number) - (previous as number) : null;
-                const varianceColor = variance == null ? "" : variance > 0 ? "text-red-400" : "text-emerald-400";
+                const varianceColor = variance == null ? "" : variance > 0 ? "text-negative" : "text-positive";
                 const varianceSign = variance == null ? "" : variance > 0 ? "+" : variance < 0 ? "−" : "";
                 return (
                   <div
-                    className="rounded-[10px] border border-card-border bg-card-bg-solid px-3 py-2 text-xs shadow-[0_8px_24px_rgba(0,0,0,0.4)]"
+                    className="rounded-[10px] border border-card-border bg-card-bg-solid px-3 py-2 text-xs shadow-sm"
                   >
                     <div className="mb-1 font-medium text-text-secondary">Day {label}</div>
                     {hasCurrent && (
@@ -133,7 +133,7 @@ export function DailySpendingChart({ data }: { data: DailySpendingData }) {
             <Area
               type="monotone"
               dataKey={data.previousLabel}
-              stroke="#64748b"
+              stroke="var(--text-muted)"
               strokeDasharray="4 4"
               fill="none"
               strokeWidth={1.5}
@@ -142,7 +142,7 @@ export function DailySpendingChart({ data }: { data: DailySpendingData }) {
             <Area
               type="monotone"
               dataKey={data.currentLabel}
-              stroke="#f97316"
+              stroke="var(--chart-1)"
               fill="url(#spendingGradient)"
               strokeWidth={2.5}
               connectNulls
