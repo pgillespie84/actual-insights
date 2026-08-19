@@ -25,22 +25,36 @@ async function balancesOnOrBefore(
 }
 
 /**
- * Sum of (endBalance - startBalance) across the given accounts, in cents, or
- * null when not one account has a snapshot at both boundaries.
+ * A total, plus how much of the requested group it actually covers.
  *
- * An account missing a snapshot at either boundary contributes nothing.
- * Treating a missing snapshot as a zero balance instead would report the
- * entire opposite boundary as a swing.
+ * The counts are the point. A total alone cannot distinguish "nothing moved"
+ * from "no history to compare", nor "the group moved $120" from "one of five
+ * accounts moved $120 and the rest are unknown". Callers decide how to present
+ * each case; this module refuses to guess by folding them together.
+ */
+export interface BalanceCoverage {
+  /** Sum across the accounts with usable snapshots. Meaningless if known is 0. */
+  total: number;
+  /** How many of the requested accounts had the snapshots needed. */
+  known: number;
+  /** How many accounts were asked about. */
+  requested: number;
+}
+
+/**
+ * Sum of (endBalance - startBalance) across the given accounts, in cents, with
+ * coverage.
  *
- * Null and zero are kept apart for the same reason `sumBalances` keeps them
- * apart: a month whose history was never backfilled has an unknown movement,
- * and reporting it as "no change" is a confident wrong number.
+ * An account missing a snapshot at either boundary contributes nothing and is
+ * excluded from `known`. Treating a missing snapshot as a zero balance instead
+ * would report the entire opposite boundary as a swing, and an account that did
+ * not exist yet in the period genuinely has no movement to report.
  */
 export function sumBalanceDeltas(
   accountIds: string[],
   startBalances: Map<string, number>,
   endBalances: Map<string, number>
-): number | null {
+): BalanceCoverage {
   let total = 0;
   let known = 0;
   for (const accountId of accountIds) {
@@ -50,24 +64,20 @@ export function sumBalanceDeltas(
     total += end - start;
     known += 1;
   }
-  return known === 0 ? null : total;
+  return { total, known, requested: accountIds.length };
 }
 
 /**
- * Total balance across the given accounts, in cents, or null when not one of
- * them has a snapshot.
+ * Total balance across the given accounts, in cents, with coverage.
  *
- * Missing accounts are skipped rather than counted as zero, which matches
- * `sumBalanceDeltas` and means an account that did not exist yet in the month
- * being viewed does not drag the total down. Null and zero are kept apart on
- * purpose: the card renders null as an em dash, and rendering it as $0.00
- * would be a confident wrong number on a month whose history was never
- * backfilled.
+ * Missing accounts are skipped rather than counted as zero, matching
+ * `sumBalanceDeltas`, so an account that did not exist yet in the month being
+ * viewed does not drag the total down.
  */
 export function sumBalances(
   accountIds: string[],
   balances: Map<string, number>
-): number | null {
+): BalanceCoverage {
   let total = 0;
   let known = 0;
   for (const accountId of accountIds) {
@@ -76,7 +86,7 @@ export function sumBalances(
     total += balance;
     known += 1;
   }
-  return known === 0 ? null : total;
+  return { total, known, requested: accountIds.length };
 }
 
 /**
@@ -89,9 +99,7 @@ export function sumBalances(
 export async function getBalanceAt(
   accountIds: string[],
   date: Date
-): Promise<number | null> {
-  if (accountIds.length === 0) return null;
-
+): Promise<BalanceCoverage> {
   const balances = await balancesOnOrBefore(accountIds, date);
   return sumBalances(accountIds, balances);
 }
@@ -104,7 +112,7 @@ export async function getBalanceDelta(
   accountIds: string[],
   startDate: Date,
   endDate: Date
-): Promise<number | null> {
+): Promise<BalanceCoverage> {
   const [startBalances, endBalances] = await Promise.all([
     balancesOnOrBefore(accountIds, startDate),
     balancesOnOrBefore(accountIds, endDate),

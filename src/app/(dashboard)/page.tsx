@@ -12,7 +12,8 @@ import { AISummaryCard } from "@/components/AISummaryCard";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { EmailDashboardButton } from "@/components/EmailDashboardButton";
 import { banRowGridClass, bottomRowGridClass } from "@/lib/gridLayout";
-import { formatDollars, formatSignedDollars } from "@/lib/format";
+import { formatDollars } from "@/lib/format";
+import { savingsDetail, debtDetail } from "@/lib/metricDetail";
 import type { DashboardResponse } from "@/types/api";
 import { useMonthlyData } from "@/hooks/useMonthlyData";
 
@@ -21,9 +22,13 @@ import { useMonthlyData } from "@/hooks/useMonthlyData";
  *
  * Both came off the dashboard when the metric row went to three boxes. Neither
  * is deleted and neither has moved: the components, their queries and their
- * fields in /api/dashboard are all untouched, so restoring either one is a
- * one-line change here. They are waiting on the trends and analytics redesigns
- * to decide where they belong.
+ * fields in /api/dashboard are all untouched, so either can be restored here.
+ * They are waiting on the trends and analytics redesigns to decide where they
+ * belong.
+ *
+ * SUPERSEDED — SavingsMetricCard and DebtMetricCard. Not parked: MetricBan
+ * replaces both, and putting them back would mean two components rendering the
+ * same numbers differently. They still compile, so the files are harmless.
  */
 
 function DashboardContent() {
@@ -39,14 +44,14 @@ function DashboardContent() {
     );
   }
 
-  const savingsDelta = data.savingsMetric.monthDelta;
-  const debtDelta = data.debtMetric.monthDelta;
   const { income, expenses, net } = data.cashFlow;
 
-  // A null delta means no snapshot at one end of the month, so the movement is
-  // unknown. Saying "+$0 this month" there would be the confident wrong number
-  // the em dash on the balance exists to avoid.
-  const NO_HISTORY = "No balance history";
+  // The rules for what these lines may claim live in metricDetail, where they
+  // are unit-tested: an unknown movement must not read as "+$0 this month", a
+  // config mismatch must not read as missing history, and a figure covering
+  // part of a group must say so.
+  const savings = savingsDetail(data.savingsMetric);
+  const debt = debtDetail(data.debtMetric);
 
   return (
     <div className={isPrint ? "space-y-4" : "space-y-6"}>
@@ -80,26 +85,14 @@ function DashboardContent() {
         <MetricBan
           label="Savings"
           value={data.savingsMetric.balance}
-          detail={
-            savingsDelta === null
-              ? NO_HISTORY
-              : `${formatSignedDollars(savingsDelta)} this month`
-          }
-          detailTone={
-            savingsDelta === null ? "neutral" : savingsDelta >= 0 ? "positive" : "negative"
-          }
+          detail={savings.text}
+          detailTone={savings.tone}
         />
         <MetricBan
           label="Debt"
           value={data.debtMetric.balance}
-          detail={
-            debtDelta === null
-              ? NO_HISTORY
-              : `${formatDollars(Math.abs(debtDelta))} ${debtDelta >= 0 ? "paid down" : "added"}`
-          }
-          detailTone={
-            debtDelta === null ? "neutral" : debtDelta >= 0 ? "positive" : "negative"
-          }
+          detail={debt.text}
+          detailTone={debt.tone}
         />
         <MetricBan
           label="Cash flow"
