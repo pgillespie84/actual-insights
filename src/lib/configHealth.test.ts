@@ -11,10 +11,11 @@ const db = {
   groupNames: ["Food", "Housing"],
 };
 
-/** The four keys constants.ts indexes by hand, so tests isolate one rule. */
+/** The keys constants.ts indexes by hand, so tests isolate one rule. */
 const requiredGroups = {
   Savings: [],
   "Debt — Loans": [],
+  "Debt — Credit Cards": [],
   Retirement: [],
   "Taxable Investments": [],
 };
@@ -73,9 +74,9 @@ test("every other name-matched setting is checked against its own table", () => 
 
 test("a NET_WORTH_GROUPS key the code indexes by hand is required", () => {
   // constants.ts reads NET_WORTH_GROUPS["Savings"], ["Debt — Loans"],
-  // ["Retirement"] and ["Taxable Investments"] by exact key and spreads the
-  // result. A missing key spreads undefined and throws, so this one takes the
-  // dashboard down rather than skewing it.
+  // ["Debt — Credit Cards"], ["Retirement"] and ["Taxable Investments"] by
+  // exact key and spreads the result. A missing key spreads undefined and
+  // throws, so this one takes the dashboard down rather than skewing it.
   const problems = checkConfigHealth(
     { NET_WORTH_GROUPS: { Savings: [], "Debt — Loans": [], Retirement: [] } },
     db,
@@ -84,8 +85,107 @@ test("a NET_WORTH_GROUPS key the code indexes by hand is required", () => {
   expect(problems).toEqual([
     {
       setting: "NET_WORTH_GROUPS",
+      value: "Debt — Credit Cards",
+      kind: "missing-required-group",
+    },
+    {
+      setting: "NET_WORTH_GROUPS",
       value: "Taxable Investments",
       kind: "missing-required-group",
     },
   ]);
+});
+
+// requireGroup throws on a value that is present but not a list, so the admin
+// page has to catch that too — otherwise the check that exists to pre-empt the
+// failure passes and the dashboard 500s anyway.
+test("a required group present as a bare string is reported as malformed", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: {
+        ...requiredGroups,
+        Savings: "General Savings" as unknown as string[],
+      },
+    },
+    db,
+  );
+
+  expect(problems).toEqual([
+    {
+      setting: "NET_WORTH_GROUPS.Savings",
+      value: '"General Savings"',
+      kind: "malformed-list",
+    },
+  ]);
+});
+
+// The old code passed the string straight into the name loop, whose
+// `for (const value of values)` iterates characters — one bogus row per letter.
+test("a malformed group is reported once, not once per character", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: { ...requiredGroups, Savings: "General" as unknown as string[] },
+    },
+    db,
+  );
+
+  expect(problems).toHaveLength(1);
+});
+
+test("a required group present as null is reported as malformed", () => {
+  const problems = checkConfigHealth(
+    { NET_WORTH_GROUPS: { ...requiredGroups, Savings: null as unknown as string[] } },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "NET_WORTH_GROUPS.Savings", value: "null", kind: "malformed-list" },
+  ]);
+});
+
+// The guard lives in report(), so it covers every setting rather than the one
+// loop that happened to be fixed first. A bare string here used to iterate its
+// characters, giving one bogus row per letter.
+test("a flat list given as a bare string is reported once", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: requiredGroups,
+      SKIP_CATEGORIES: "Groceries" as unknown as string[],
+    },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "SKIP_CATEGORIES", value: '"Groceries"', kind: "malformed-list" },
+  ]);
+});
+
+test("a malformed BUDGET_BUCKETS entry is reported once", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: requiredGroups,
+      BUDGET_BUCKETS: { Fixed: "Housing" as unknown as string[] },
+    },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "BUDGET_BUCKETS.Fixed", value: '"Housing"', kind: "malformed-list" },
+  ]);
+});
+
+test("every malformed setting is reported, one row each", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: requiredGroups,
+      SKIP_CATEGORIES: "a" as unknown as string[],
+      SKIP_INCOME: "b" as unknown as string[],
+      BUSINESS_CATEGORIES: "c" as unknown as string[],
+      EXCLUDED_ACCOUNTS: "d" as unknown as string[],
+    },
+    db,
+  );
+
+  expect(problems).toHaveLength(4);
+  expect(problems.every((p) => p.kind === "malformed-list")).toBe(true);
 });

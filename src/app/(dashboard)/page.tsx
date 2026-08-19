@@ -2,21 +2,34 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { format } from "date-fns";
 import { DailySpendingChart } from "@/components/DailySpendingChart";
 import { TopVendorsChart } from "@/components/TopVendorsChart";
-import { SavingsMetricCard } from "@/components/SavingsMetricCard";
-import { InvestmentsMetricCard } from "@/components/InvestmentsMetricCard";
-import { CashFlowTrendsWidget } from "@/components/CashFlowTrendsWidget";
+import { MetricBan } from "@/components/MetricBan";
 import { TopExpenseCategoriesWidget } from "@/components/TopExpenseCategoriesWidget";
 import { CategorySpotlightCard } from "@/components/CategorySpotlightCard";
 import { MonthSelector } from "@/components/MonthSelector";
 import { AISummaryCard } from "@/components/AISummaryCard";
-import { DebtMetricCard } from "@/components/DebtMetricCard";
+import { DashboardHeader } from "@/components/DashboardHeader";
 import { EmailDashboardButton } from "@/components/EmailDashboardButton";
-import { topRowGridClass, bottomRowGridClass } from "@/lib/gridLayout";
+import { banRowGridClass, bottomRowGridClass } from "@/lib/gridLayout";
+import { formatDollars } from "@/lib/format";
+import { savingsDetail, debtDetail } from "@/lib/metricDetail";
 import type { DashboardResponse } from "@/types/api";
 import { useMonthlyData } from "@/hooks/useMonthlyData";
+
+/*
+ * PARKED — InvestmentsMetricCard and CashFlowTrendsWidget.
+ *
+ * Both came off the dashboard when the metric row went to three boxes. Neither
+ * is deleted and neither has moved: the components, their queries and their
+ * fields in /api/dashboard are all untouched, so either can be restored here.
+ * They are waiting on the trends and analytics redesigns to decide where they
+ * belong.
+ *
+ * SUPERSEDED — SavingsMetricCard and DebtMetricCard. Not parked: MetricBan
+ * replaces both, and putting them back would mean two components rendering the
+ * same numbers differently. They still compile, so the files are harmless.
+ */
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -26,66 +39,72 @@ function DashboardContent() {
   if (loading || !data) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-card-border border-t-emerald-500" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-card-border border-t-accent" />
       </div>
     );
   }
 
+  const { income, expenses, net } = data.cashFlow;
+
+  // The rules for what these lines may claim live in metricDetail, where they
+  // are unit-tested: an unknown movement must not read as "+$0 this month", a
+  // config mismatch must not read as missing history, and a figure covering
+  // part of a group must say so.
+  const savings = savingsDetail(data.savingsMetric);
+  const debt = debtDetail(data.debtMetric);
+
   return (
     <div className={isPrint ? "space-y-4" : "space-y-6"}>
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
-          {data.lastSync && (
-            <p className="mt-1 text-sm text-text-muted">
-              Last synced {format(new Date(data.lastSync.syncedAt), "MMM d, h:mm a")}
-            </p>
-          )}
-        </div>
-        {!isPrint && (
-          <div className="flex items-center gap-3">
-            <EmailDashboardButton month={selectedMonth || data.monthKey} />
-            {data.availableMonths.length > 0 && (
-              <MonthSelector
-                months={data.availableMonths}
-                selected={selectedMonth}
-                onChange={setMonth}
-              />
-            )}
-          </div>
-        )}
-      </div>
+      <DashboardHeader
+        household={data.household}
+        monthKey={data.monthKey}
+        lastSync={data.lastSync ? data.lastSync.syncedAt : null}
+        controls={
+          isPrint ? null : (
+            <>
+              <EmailDashboardButton month={selectedMonth || data.monthKey} />
+              {data.availableMonths.length > 0 && (
+                <MonthSelector
+                  months={data.availableMonths}
+                  selected={selectedMonth}
+                  onChange={setMonth}
+                />
+              )}
+            </>
+          )
+        }
+      />
 
-      {/* AI Insights */}
-      {data.insight && (
-        <AISummaryCard
-          content={data.insight.content}
-          createdAt={data.insight.createdAt}
+      <AISummaryCard
+        content={data.insight ? data.insight.content : null}
+        createdAt={data.insight ? data.insight.createdAt : null}
+        isPrint={isPrint}
+      />
+
+      <div className={banRowGridClass(isPrint)}>
+        <MetricBan
+          label="Savings"
+          value={data.savingsMetric.balance}
+          detail={savings.text}
+          detailTone={savings.tone}
         />
-      )}
-
-      {/* Top Row: Spending | Financial Metrics | Cash Flow */}
-      <div className={topRowGridClass(isPrint)}>
-        <DailySpendingChart data={data.dailySpending} />
-        <div className="space-y-6">
-          <SavingsMetricCard
-            monthDelta={data.savingsMetric.monthDelta}
-            ytdDelta={data.savingsMetric.ytdDelta}
-          />
-          <InvestmentsMetricCard
-            monthDelta={data.investmentsMetric.monthDelta}
-            ytdDelta={data.investmentsMetric.ytdDelta}
-          />
-          <DebtMetricCard
-            monthDelta={data.debtMetric.monthDelta}
-            ytdDelta={data.debtMetric.ytdDelta}
-          />
-        </div>
-        <CashFlowTrendsWidget data={data.cashFlowTrends} />
+        <MetricBan
+          label="Debt"
+          value={data.debtMetric.balance}
+          detail={debt.text}
+          detailTone={debt.tone}
+        />
+        <MetricBan
+          label="Cash flow"
+          value={net}
+          signed
+          valueTone={net >= 0 ? "positive" : "negative"}
+          detail={`${formatDollars(income)} in · ${formatDollars(expenses)} out`}
+        />
       </div>
 
-      {/* Bottom Row: Transactions | Top Categories | Spotlights */}
+      <DailySpendingChart data={data.dailySpending} />
+
       <div className={bottomRowGridClass(isPrint, data.categorySpotlights.length > 0)}>
         <TopVendorsChart data={data.topPayees} />
         <TopExpenseCategoriesWidget categories={data.topExpenseCategories} />
@@ -106,7 +125,7 @@ export default function DashboardPage() {
     <Suspense
       fallback={
         <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-card-border border-t-emerald-500" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-card-border border-t-accent" />
         </div>
       }
     >
