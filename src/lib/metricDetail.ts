@@ -36,18 +36,21 @@ const NO_HISTORY: MetricDetail = {
 };
 
 /**
- * Some accounts have history and others do not, and there is no movement
- * figure to qualify. The headline balance still covers only part of the group,
+ * The group is covered only in part and there is no movement figure to qualify,
  * so the card has to say so on its own.
+ *
+ * Deliberately "coverage" rather than "history": the cause may be a missing
+ * snapshot or a configured account name that matches nothing, and naming the
+ * wrong one sends the reader after the wrong fix.
  */
 const PARTIAL_ONLY: MetricDetail = {
-  text: "Partial history",
+  text: "Partial coverage",
   tone: "neutral",
 };
 
 /** Appended when the number is real but does not cover the whole group. */
 function qualify(text: string, partial: boolean): string {
-  return partial ? `${text} · partial history` : text;
+  return partial ? `${text} · partial coverage` : text;
 }
 
 function unavailable({

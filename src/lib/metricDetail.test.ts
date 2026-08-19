@@ -46,7 +46,7 @@ test("a config mismatch is reported even if a delta somehow arrived", () => {
 // whole group, and the card has to say so.
 test("savings qualifies a partially covered movement", () => {
   expect(savingsDetail({ ...full, partial: true })).toEqual({
-    text: "+$1,240 this month · partial history",
+    text: "+$1,240 this month · partial coverage",
     tone: "positive",
   });
 });
@@ -57,14 +57,14 @@ test("savings qualifies a partially covered movement", () => {
 // it is partial.
 test("savings says the coverage is partial even when the movement is unknown", () => {
   expect(savingsDetail({ monthDelta: null, partial: true, hasAccounts: true })).toEqual({
-    text: "Partial history",
+    text: "Partial coverage",
     tone: "neutral",
   });
 });
 
 test("debt says the coverage is partial even when the movement is unknown", () => {
   expect(debtDetail({ monthDelta: null, partial: true, hasAccounts: true })).toEqual({
-    text: "Partial history",
+    text: "Partial coverage",
     tone: "neutral",
   });
 });
@@ -92,7 +92,7 @@ test("debt says the history is missing rather than showing zero", () => {
 
 test("debt qualifies a partially covered movement", () => {
   expect(debtDetail({ ...full, monthDelta: 38_400, partial: true })).toEqual({
-    text: "$384 paid down · partial history",
+    text: "$384 paid down · partial coverage",
     tone: "positive",
   });
 });
