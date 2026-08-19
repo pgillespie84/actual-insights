@@ -43,6 +43,11 @@ function DashboardContent() {
   const debtDelta = data.debtMetric.monthDelta;
   const { income, expenses, net } = data.cashFlow;
 
+  // A null delta means no snapshot at one end of the month, so the movement is
+  // unknown. Saying "+$0 this month" there would be the confident wrong number
+  // the em dash on the balance exists to avoid.
+  const NO_HISTORY = "No balance history";
+
   return (
     <div className={isPrint ? "space-y-4" : "space-y-6"}>
       <DashboardHeader
@@ -75,14 +80,26 @@ function DashboardContent() {
         <MetricBan
           label="Savings"
           value={data.savingsMetric.balance}
-          detail={`${formatSignedDollars(savingsDelta)} this month`}
-          detailTone={savingsDelta >= 0 ? "positive" : "negative"}
+          detail={
+            savingsDelta === null
+              ? NO_HISTORY
+              : `${formatSignedDollars(savingsDelta)} this month`
+          }
+          detailTone={
+            savingsDelta === null ? "neutral" : savingsDelta >= 0 ? "positive" : "negative"
+          }
         />
         <MetricBan
           label="Debt"
           value={data.debtMetric.balance}
-          detail={`${formatDollars(Math.abs(debtDelta))} ${debtDelta >= 0 ? "paid down" : "added"}`}
-          detailTone={debtDelta >= 0 ? "positive" : "negative"}
+          detail={
+            debtDelta === null
+              ? NO_HISTORY
+              : `${formatDollars(Math.abs(debtDelta))} ${debtDelta >= 0 ? "paid down" : "added"}`
+          }
+          detailTone={
+            debtDelta === null ? "neutral" : debtDelta >= 0 ? "positive" : "negative"
+          }
         />
         <MetricBan
           label="Cash flow"

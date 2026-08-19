@@ -60,7 +60,12 @@ export function DailySpendingChart({ data }: { data: DailySpendingData }) {
         {formatCents(currentTotal)}
       </p>
       <p className="mb-4 text-xs text-text-muted">This month vs. last month</p>
-      <div className="flex-1 min-h-0">
+      {/*
+        An explicit height, not flex-1. This card is full width now rather than
+        a cell in an equal-height grid row, so there is no parent height to
+        fill: ResponsiveContainer would collapse to zero and draw nothing.
+      */}
+      <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={trimmedData} margin={{ top: 5, right: 10, bottom: 0, left: -10 }}>
             <defs>

@@ -576,8 +576,13 @@ export async function getCategorySpotlight(monthDate: Date, categoryNames?: stri
 export interface BalanceMetric {
   /** Null when no account in the group has a snapshot for the month. */
   balance: number | null;
-  monthDelta: number;
-  ytdDelta: number;
+  /**
+   * Null when no account has snapshots at both ends of the period, so the
+   * movement is unknown rather than zero. The card says so instead of
+   * claiming nothing moved.
+   */
+  monthDelta: number | null;
+  ytdDelta: number | null;
 }
 
 /**
@@ -605,7 +610,7 @@ async function accountBalanceMetric(
     select: { id: true, balance: true },
   });
   if (accounts.length === 0) {
-    return { balance: null, monthDelta: 0, ytdDelta: 0 };
+    return { balance: null, monthDelta: null, ytdDelta: null };
   }
 
   const accountIds = accounts.map((a) => a.id);
@@ -641,8 +646,8 @@ export async function getDebtMetric(monthKey: string): Promise<BalanceMetric> {
   // amount owed, matching how getNetWorth sums totalDebt.
   return {
     balance: balance === null ? null : Math.abs(balance),
-    monthDelta: -monthDelta,
-    ytdDelta: -ytdDelta,
+    monthDelta: monthDelta === null ? null : -monthDelta,
+    ytdDelta: ytdDelta === null ? null : -ytdDelta,
   };
 }
 
@@ -716,7 +721,9 @@ export async function getInvestmentsMetric(monthKey: string): Promise<{
     _sum: { amount: true },
   });
   const contributions = contributionResult._sum.amount || 0;
-  const growth = monthDelta - contributions;
+  // This widget is parked off the dashboard and keeps its old behaviour: an
+  // unknown movement reads as zero here. Worth revisiting when it comes back.
+  const growth = (monthDelta ?? 0) - contributions;
 
   // Earliest snapshot date for any investment account
   const earliestSnapshot = await prisma.accountBalanceSnapshot.findFirst({
@@ -728,7 +735,13 @@ export async function getInvestmentsMetric(monthKey: string): Promise<{
     ? format(earliestSnapshot.date, "yyyy-MM-dd")
     : null;
 
-  return { monthDelta, ytdDelta, contributions, growth, trackingSince };
+  return {
+    monthDelta: monthDelta ?? 0,
+    ytdDelta: ytdDelta ?? 0,
+    contributions,
+    growth,
+    trackingSince,
+  };
 }
 
 export async function getNetWorth() {
