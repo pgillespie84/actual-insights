@@ -24,7 +24,7 @@ export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
 
   return (
     <div className="widget-card flex flex-col p-6">
-      <h2 className="mb-4 text-lg font-semibold text-text-primary">Top Vendors</h2>
+      <h2 className="mb-4 font-serif text-lg font-normal text-text-primary">Top vendors</h2>
       <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
@@ -67,7 +67,7 @@ export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
               {chartData.map((_, i) => (
                 <Cell
                   key={i}
-                  fill={i === 0 ? "#f97316" : "#64748b"}
+                  fill={i === 0 ? "var(--chart-1)" : "var(--chart-2)"}
                   fillOpacity={1 - i * 0.06}
                 />
               ))}

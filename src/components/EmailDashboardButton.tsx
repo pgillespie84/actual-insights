@@ -32,9 +32,9 @@ export function EmailDashboardButton({ month }: { month: string }) {
       disabled={state === "sending"}
       className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
         state === "sent"
-          ? "bg-emerald-500/10 text-emerald-400"
+          ? "bg-accent-soft text-positive"
           : state === "error"
-            ? "bg-red-500/10 text-red-400"
+            ? "bg-warning-bg text-negative"
             : "bg-card-bg text-text-secondary border border-card-border hover:bg-hover-bg hover:text-text-primary"
       } disabled:opacity-50`}
     >
