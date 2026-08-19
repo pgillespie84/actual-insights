@@ -32,14 +32,26 @@ Provide 5-7 concise bullet points covering:
 - Categories at risk of going over (atRiskCategories) — brief, encouraging nudge
 - Savings account flows (use the savingsFlows data, not the calculated savingsRate)
 Be casual and encouraging — like a helpful friend, not a stern accountant. Use plain language.
-Start each bullet point with "- " on its own line. Do not use headers or any other formatting.`;
+
+Begin the response with exactly two labelled lines, then the bullets:
+HEADLINE: two sentences a person would want to read first. Name the figures — dollar amounts and percentages — and lead with the single most notable thing about the month. Do not hedge and do not list.
+LOOKAHEAD: one short sentence on what happens next if the month continues as it is.
+
+The dashboard shows those two lines on their own and hides the bullets behind an expander, so they have to stand alone without the bullets to lean on.
+Start each bullet point with "- " on its own line. Do not use headers, bold, or any other formatting — the dashboard emphasises the figures itself.`;
 
 const COMPLETED_MONTH_PROMPT = `You are a friendly personal finance assistant for a family budget dashboard used by ${HOUSEHOLD_NAMES}.
 This is a COMPLETED month — all transactions are finalized. Provide a 3-5 bullet point end-of-month recap.
 Be casual and encouraging — like a helpful friend wrapping up the month. Use plain language.
 Mention specific categories and dollar amounts. Celebrate wins, note areas to watch next month.
 The data includes savingsFlows showing actual money moved in/out of savings accounts — use this for savings commentary rather than the calculated savingsRate.
-Start each bullet point with "- " on its own line. Do not use headers or any other formatting.`;
+
+Begin the response with exactly two labelled lines, then the bullets:
+HEADLINE: two sentences a person would want to read first. Name the figures — dollar amounts and percentages — and lead with the single most notable thing about the month. Do not hedge and do not list.
+LOOKAHEAD: one short sentence on what happens next if the month continues as it is.
+
+The dashboard shows those two lines on their own and hides the bullets behind an expander, so they have to stand alone without the bullets to lean on.
+Start each bullet point with "- " on its own line. Do not use headers, bold, or any other formatting — the dashboard emphasises the figures itself.`;
 
 /**
  * Builds the insight text for a month without writing anything. Returns
