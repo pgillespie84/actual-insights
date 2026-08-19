@@ -25,25 +25,32 @@ async function balancesOnOrBefore(
 }
 
 /**
- * Sum of (endBalance - startBalance) across the given accounts, in cents.
+ * Sum of (endBalance - startBalance) across the given accounts, in cents, or
+ * null when not one account has a snapshot at both boundaries.
  *
- * An account missing a snapshot at either boundary contributes 0. Treating a
- * missing snapshot as a zero balance instead would report the entire opposite
- * boundary as a swing.
+ * An account missing a snapshot at either boundary contributes nothing.
+ * Treating a missing snapshot as a zero balance instead would report the
+ * entire opposite boundary as a swing.
+ *
+ * Null and zero are kept apart for the same reason `sumBalances` keeps them
+ * apart: a month whose history was never backfilled has an unknown movement,
+ * and reporting it as "no change" is a confident wrong number.
  */
 export function sumBalanceDeltas(
   accountIds: string[],
   startBalances: Map<string, number>,
   endBalances: Map<string, number>
-): number {
+): number | null {
   let total = 0;
+  let known = 0;
   for (const accountId of accountIds) {
     const start = startBalances.get(accountId);
     const end = endBalances.get(accountId);
     if (start === undefined || end === undefined) continue;
     total += end - start;
+    known += 1;
   }
-  return total;
+  return known === 0 ? null : total;
 }
 
 /**
@@ -97,7 +104,7 @@ export async function getBalanceDelta(
   accountIds: string[],
   startDate: Date,
   endDate: Date
-): Promise<number> {
+): Promise<number | null> {
   const [startBalances, endBalances] = await Promise.all([
     balancesOnOrBefore(accountIds, startDate),
     balancesOnOrBefore(accountIds, endDate),

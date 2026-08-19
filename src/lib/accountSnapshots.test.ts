@@ -18,6 +18,22 @@ test("accounts missing a snapshot at either boundary contribute nothing", () => 
   expect(sumBalanceDeltas(["a", "b", "c"], start, end)).toBe(500);
 });
 
+// Same rule the balance follows: nothing known is not the same as no movement.
+// A month whose history was never backfilled would otherwise report a
+// confident "no change" for accounts that may well have moved.
+test("sumBalanceDeltas returns null when no account has both boundaries", () => {
+  const start = new Map([["a", 1000]]);
+  const end = new Map([["b", 2000]]);
+
+  expect(sumBalanceDeltas(["a", "b"], start, end)).toBeNull();
+});
+
+test("sumBalanceDeltas returns zero when a known account genuinely did not move", () => {
+  const balances = new Map([["a", 1000]]);
+
+  expect(sumBalanceDeltas(["a"], balances, balances)).toBe(0);
+});
+
 // A balance total skips accounts with no snapshot rather than counting them as
 // zero, matching sumBalanceDeltas. An account that did not exist yet in the
 // month being viewed should not drag the total down.
