@@ -20,7 +20,7 @@ type NameKind = "unknown-account" | "unknown-category" | "unknown-group";
  * Kinds that describe the shape of the config itself rather than a name that
  * failed to match, so no database lookup applies.
  */
-type ShapeKind = "missing-required-group" | "malformed-group";
+type ShapeKind = "missing-required-group" | "malformed-list";
 
 export type ProblemKind = NameKind | ShapeKind;
 
@@ -74,7 +74,25 @@ export function checkConfigHealth(
     "unknown-group": new Set(db.groupNames),
   };
 
+  /**
+   * Check one configured list of names against the database.
+   *
+   * The shape guard lives here rather than at the call sites because every
+   * setting reaches the database through this one function, and a value that is
+   * a bare string instead of a list would otherwise be iterated character by
+   * character — one bogus row per letter. loadConfig.cjs is a raw JSON.parse, so
+   * the `string[]` type is a claim about hand-edited JSON rather than something
+   * anything enforces.
+   */
   const report = (setting: string, values: string[], kind: NameKind) => {
+    if (!Array.isArray(values)) {
+      problems.push({
+        setting,
+        value: JSON.stringify(values) ?? String(values),
+        kind: "malformed-list",
+      });
+      return;
+    }
     for (const value of values) {
       if (!known[kind].has(value)) problems.push({ setting, value, kind });
     }
@@ -91,19 +109,9 @@ export function checkConfigHealth(
     }
   }
 
+  // No shape check here: report() guards every setting, so a group that is not
+  // a list is reported once by the same rule as any other malformed list.
   for (const [group, names] of Object.entries(netWorthGroups)) {
-    // requireGroup throws on a value that is present but not a list, so this
-    // has to catch it too — otherwise the check that exists to pre-empt that
-    // failure passes and the dashboard 500s anyway. Reported once: passing a
-    // string into report() iterates its characters, one bogus row per letter.
-    if (!Array.isArray(names)) {
-      problems.push({
-        setting: `NET_WORTH_GROUPS.${group}`,
-        value: JSON.stringify(names) ?? String(names),
-        kind: "malformed-group",
-      });
-      continue;
-    }
     report(`NET_WORTH_GROUPS.${group}`, names, "unknown-account");
   }
 

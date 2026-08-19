@@ -24,7 +24,7 @@ const PROBLEM_LABELS: Record<string, string> = {
   "unknown-category": "no category by this name",
   "unknown-group": "no category group by this name",
   "missing-required-group": "required group missing from config",
-  "malformed-group": "not a list of account names",
+  "malformed-list": "not a list of names",
 };
 
 function StatusLine({ status }: { status: JobStatus }) {

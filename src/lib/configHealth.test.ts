@@ -114,7 +114,7 @@ test("a required group present as a bare string is reported as malformed", () =>
     {
       setting: "NET_WORTH_GROUPS.Savings",
       value: '"General Savings"',
-      kind: "malformed-group",
+      kind: "malformed-list",
     },
   ]);
 });
@@ -139,6 +139,53 @@ test("a required group present as null is reported as malformed", () => {
   );
 
   expect(problems).toEqual([
-    { setting: "NET_WORTH_GROUPS.Savings", value: "null", kind: "malformed-group" },
+    { setting: "NET_WORTH_GROUPS.Savings", value: "null", kind: "malformed-list" },
   ]);
+});
+
+// The guard lives in report(), so it covers every setting rather than the one
+// loop that happened to be fixed first. A bare string here used to iterate its
+// characters, giving one bogus row per letter.
+test("a flat list given as a bare string is reported once", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: requiredGroups,
+      SKIP_CATEGORIES: "Groceries" as unknown as string[],
+    },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "SKIP_CATEGORIES", value: '"Groceries"', kind: "malformed-list" },
+  ]);
+});
+
+test("a malformed BUDGET_BUCKETS entry is reported once", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: requiredGroups,
+      BUDGET_BUCKETS: { Fixed: "Housing" as unknown as string[] },
+    },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "BUDGET_BUCKETS.Fixed", value: '"Housing"', kind: "malformed-list" },
+  ]);
+});
+
+test("every malformed setting is reported, one row each", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: requiredGroups,
+      SKIP_CATEGORIES: "a" as unknown as string[],
+      SKIP_INCOME: "b" as unknown as string[],
+      BUSINESS_CATEGORIES: "c" as unknown as string[],
+      EXCLUDED_ACCOUNTS: "d" as unknown as string[],
+    },
+    db,
+  );
+
+  expect(problems).toHaveLength(4);
+  expect(problems.every((p) => p.kind === "malformed-list")).toBe(true);
 });
