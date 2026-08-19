@@ -14,7 +14,12 @@ import type { Tone } from "./tone";
 export interface MetricDetailInput {
   /** Null when no account in the group had usable snapshots. */
   monthDelta: number | null;
-  /** True when some but not all accounts in the group had usable snapshots. */
+  /**
+   * True when the figures cover less than the whole configured group — an
+   * account missing the snapshots needed, or a configured name that matched no
+   * account at all. The two need different fixes, which is why the copy says
+   * "coverage" rather than "history".
+   */
   partial: boolean;
   /** False when the configured account names matched nothing in the database. */
   hasAccounts: boolean;

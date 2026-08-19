@@ -42,12 +42,40 @@ export const NET_WORTH_GROUPS: Record<string, string[]> = config.NET_WORTH_GROUP
 
 export const EXCLUDED_ACCOUNTS: string[] = config.EXCLUDED_ACCOUNTS;
 
+/**
+ * A NET_WORTH_GROUPS entry the queries index by hand, or a legible error.
+ *
+ * A config missing one of these used to fail in whatever way the caller
+ * happened to break. `getSavingsAccountNames()` returned undefined, Prisma
+ * dropped the resulting `in: undefined` filter and matched every account,
+ * which is a confident wrong number on a rendered page; once the coverage
+ * check started calling `.every` on the same value it became a TypeError and a
+ * 500 on the whole dashboard. Neither told the reader which setting was wrong.
+ *
+ * Failing loudly is the right call on a financial figure, but it has to name
+ * the setting. `checkConfigHealth` reports the same problem on the admin page.
+ */
+export function requireGroup(
+  groups: Record<string, string[]>,
+  key: string,
+): string[] {
+  const names = groups[key];
+  if (!Array.isArray(names)) {
+    throw new Error(
+      `Config is missing NET_WORTH_GROUPS["${key}"], or it is not a list of ` +
+        `account names. Add it to the dashboard config — this metric cannot ` +
+        `be computed without it.`,
+    );
+  }
+  return names;
+}
+
 export function getSavingsAccountNames(): string[] {
-  return NET_WORTH_GROUPS["Savings"];
+  return requireGroup(NET_WORTH_GROUPS, "Savings");
 }
 
 export function getNonMortgageDebtAccountNames(): string[] {
-  return NET_WORTH_GROUPS["Debt — Loans"];
+  return requireGroup(NET_WORTH_GROUPS, "Debt — Loans");
 }
 
 /**
@@ -59,14 +87,14 @@ export function getNonMortgageDebtAccountNames(): string[] {
  */
 export function getPayableDebtAccountNames(): string[] {
   return [
-    ...NET_WORTH_GROUPS["Debt — Loans"],
-    ...NET_WORTH_GROUPS["Debt — Credit Cards"],
+    ...requireGroup(NET_WORTH_GROUPS, "Debt — Loans"),
+    ...requireGroup(NET_WORTH_GROUPS, "Debt — Credit Cards"),
   ];
 }
 
 export function getInvestmentAccountNames(): string[] {
   return [
-    ...NET_WORTH_GROUPS["Retirement"],
-    ...NET_WORTH_GROUPS["Taxable Investments"],
+    ...requireGroup(NET_WORTH_GROUPS, "Retirement"),
+    ...requireGroup(NET_WORTH_GROUPS, "Taxable Investments"),
   ];
 }
