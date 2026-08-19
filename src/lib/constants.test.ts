@@ -8,6 +8,8 @@ import {
   EXCLUDED_ACCOUNTS,
   getSavingsAccountNames,
   getNonMortgageDebtAccountNames,
+  getPayableDebtAccountNames,
+  requireGroup,
   getInvestmentAccountNames,
   NET_WORTH_GROUPS,
 } from "./constants.ts";
@@ -33,6 +35,7 @@ const REQUIRED_NET_WORTH_GROUPS = [
   "Retirement",
   "Taxable Investments",
   "Debt — Loans",
+  "Debt — Credit Cards",
 ];
 
 test("loaded config has every required key", () => {
@@ -82,4 +85,64 @@ test("getInvestmentAccountNames combines Retirement and Taxable Investments", ()
     ...NET_WORTH_GROUPS["Retirement"],
     ...NET_WORTH_GROUPS["Taxable Investments"],
   ]);
+});
+
+test("getPayableDebtAccountNames combines Loans and Credit Cards", () => {
+  expect(getPayableDebtAccountNames()).toEqual([
+    ...NET_WORTH_GROUPS["Debt — Loans"],
+    ...NET_WORTH_GROUPS["Debt — Credit Cards"],
+  ]);
+});
+
+// The mortgage is deliberately absent: a 30-year balance moving a few hundred
+// dollars a month swamps the number the debt card exists to show.
+test("getPayableDebtAccountNames excludes the mortgage", () => {
+  const mortgages = NET_WORTH_GROUPS["Debt — Mortgage"];
+  for (const name of mortgages) {
+    expect(getPayableDebtAccountNames()).not.toContain(name);
+  }
+});
+
+// A config missing one of the hand-indexed groups used to fail in whichever
+// way the caller happened to break. getSavingsAccountNames returned undefined,
+// Prisma dropped an `in: undefined` filter and matched every account — a
+// confident wrong number — and once coverage started calling .every on it, the
+// same config took /api/dashboard to a 500 instead. Neither told the reader
+// which setting was at fault.
+test("requireGroup returns the configured names", () => {
+  expect(
+    requireGroup({ Savings: ["General", "Long Term"] }, "Savings", "NET_WORTH_GROUPS"),
+  ).toEqual([
+    "General",
+    "Long Term",
+  ]);
+});
+
+test("requireGroup names the missing setting in the error", () => {
+  expect(() => requireGroup({}, "Savings", "NET_WORTH_GROUPS")).toThrow(
+    /NET_WORTH_GROUPS\["Savings"\]/,
+  );
+});
+
+// The map is a parameter, so the message must be too. Hardcoding one setting
+// name would eventually point at the wrong one, which is the exact failure
+// this function exists to remove.
+test("requireGroup names whichever setting it was given", () => {
+  expect(() => requireGroup({}, "Fixed", "BUDGET_BUCKETS")).toThrow(
+    /BUDGET_BUCKETS\["Fixed"\]/,
+  );
+});
+
+test("requireGroup rejects a group that is present but not a list", () => {
+  expect(() =>
+    requireGroup(
+      { Savings: "General" } as unknown as Record<string, string[]>,
+      "Savings",
+      "NET_WORTH_GROUPS",
+    ),
+  ).toThrow(/NET_WORTH_GROUPS\["Savings"\]/);
+});
+
+test("requireGroup accepts a deliberately empty group", () => {
+  expect(requireGroup({ Savings: [] }, "Savings", "NET_WORTH_GROUPS")).toEqual([]);
 });

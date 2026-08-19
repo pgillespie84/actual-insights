@@ -9,19 +9,34 @@
  * This is the only thing that surfaces those.
  */
 
-export type ProblemKind =
-  | "unknown-account"
-  | "unknown-category"
-  | "unknown-group"
-  | "missing-required-group";
+/**
+ * Kinds that mean "this configured name matched nothing in the database".
+ * These are the only ones `report` can produce, since it works by set
+ * membership against a table of real names.
+ */
+type NameKind = "unknown-account" | "unknown-category" | "unknown-group";
 
 /**
- * constants.ts indexes these four keys directly and spreads the result, so a
- * config without one of them throws at import rather than degrading.
+ * Kinds that describe the shape of the config itself rather than a name that
+ * failed to match, so no database lookup applies.
+ */
+type ShapeKind = "missing-required-group" | "malformed-list";
+
+export type ProblemKind = NameKind | ShapeKind;
+
+/**
+ * constants.ts reads these keys by hand, through `requireGroup`, so a config
+ * without one of them throws when the metric is computed — naming the setting —
+ * rather than degrading into a wrong number.
+ *
+ * Not at import, despite what this comment used to say: they are function
+ * bodies, so nothing evaluates until a query calls them. This list is what
+ * surfaces the same problem on the admin page before a request hits it.
  */
 const REQUIRED_NET_WORTH_GROUPS = [
   "Savings",
   "Debt — Loans",
+  "Debt — Credit Cards",
   "Retirement",
   "Taxable Investments",
 ];
@@ -53,14 +68,31 @@ export function checkConfigHealth(
   db: DatabaseNames,
 ): ConfigProblem[] {
   const problems: ConfigProblem[] = [];
-  const known: Record<ProblemKind, Set<string>> = {
+  const known: Record<NameKind, Set<string>> = {
     "unknown-account": new Set(db.accountNames),
     "unknown-category": new Set(db.categoryNames),
     "unknown-group": new Set(db.groupNames),
-    "missing-required-group": new Set(),
   };
 
-  const report = (setting: string, values: string[], kind: ProblemKind) => {
+  /**
+   * Check one configured list of names against the database.
+   *
+   * The shape guard lives here rather than at the call sites because every
+   * setting reaches the database through this one function, and a value that is
+   * a bare string instead of a list would otherwise be iterated character by
+   * character — one bogus row per letter. loadConfig.cjs is a raw JSON.parse, so
+   * the `string[]` type is a claim about hand-edited JSON rather than something
+   * anything enforces.
+   */
+  const report = (setting: string, values: string[], kind: NameKind) => {
+    if (!Array.isArray(values)) {
+      problems.push({
+        setting,
+        value: JSON.stringify(values) ?? String(values),
+        kind: "malformed-list",
+      });
+      return;
+    }
     for (const value of values) {
       if (!known[kind].has(value)) problems.push({ setting, value, kind });
     }
@@ -77,6 +109,8 @@ export function checkConfigHealth(
     }
   }
 
+  // No shape check here: report() guards every setting, so a group that is not
+  // a list is reported once by the same rule as any other malformed list.
   for (const [group, names] of Object.entries(netWorthGroups)) {
     report(`NET_WORTH_GROUPS.${group}`, names, "unknown-account");
   }

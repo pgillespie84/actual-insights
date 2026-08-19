@@ -16,14 +16,18 @@ export function CategorySpotlightCard({ name, budgeted, spent, remaining, percen
   const circumference = 2 * Math.PI * radius;
   const dashOffset = circumference * (1 - capped / 100);
   const isOver = spent > budgeted && budgeted > 0;
-  const strokeColor = isOver ? "#f43f5e" : percentUsed > 80 ? "#f59e0b" : "#10b981";
+  const strokeColor = isOver
+    ? "var(--negative)"
+    : percentUsed > 80
+      ? "var(--warning-text)"
+      : "var(--positive)";
   const glowColor = isOver ? "rgba(244,63,94,0.3)" : percentUsed > 80 ? "rgba(245,158,11,0.3)" : "rgba(16,185,129,0.3)";
 
   return (
     <div className="widget-card p-5">
       <div className="flex items-center gap-5">
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-bold text-text-primary">{name}</h3>
+          <h3 className="font-serif text-base font-normal text-text-primary">{name}</h3>
           <div className="mt-3 flex gap-4">
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Budget</p>
@@ -35,7 +39,7 @@ export function CategorySpotlightCard({ name, budgeted, spent, remaining, percen
             </div>
             <div>
               <p className="text-[10px] font-medium uppercase tracking-wider text-text-muted">Remaining</p>
-              <p className={`text-lg font-bold tabular-nums ${isOver ? "text-red-400" : "text-emerald-400"}`}>
+              <p className={`text-lg font-bold tabular-nums ${isOver ? "text-negative" : "text-positive"}`}>
                 {isOver ? "-" : ""}{formatCents(Math.abs(remaining))}
               </p>
             </div>

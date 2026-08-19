@@ -1,20 +1,17 @@
 import { test, expect } from "vitest";
-import { topRowGridClass, bottomRowGridClass } from "./gridLayout";
+import { banRowGridClass, bottomRowGridClass } from "./gridLayout";
 
-test("top row uses grid-cols-3 directly when print", () => {
-  const cls = topRowGridClass(true);
-  expect(cls).toContain("grid-cols-3");
-  expect(cls).not.toContain("lg:");
+// Three short numbers fit side by side even on a phone, so this row has no
+// responsive prefix at all — unlike the bottom row, which holds charts.
+test("metric row is three columns at every width", () => {
+  expect(banRowGridClass(false)).toContain("grid-cols-3");
+  expect(banRowGridClass(false)).not.toContain("lg:");
+  expect(banRowGridClass(true)).toContain("grid-cols-3");
 });
 
-test("top row uses lg:grid-cols-3 when not print", () => {
-  const cls = topRowGridClass(false);
-  expect(cls).toContain("lg:grid-cols-3");
-});
-
-test("top row gap is tighter when print", () => {
-  expect(topRowGridClass(true)).toContain("gap-4");
-  expect(topRowGridClass(false)).toContain("gap-6");
+test("metric row gap is tighter when print", () => {
+  expect(banRowGridClass(true)).toContain("gap-3");
+  expect(banRowGridClass(false)).toContain("gap-4");
 });
 
 test("bottom row uses grid-cols-3 when print with spotlights", () => {

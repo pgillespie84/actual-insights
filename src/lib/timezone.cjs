@@ -18,12 +18,15 @@ function etParts() {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
   }).formatToParts(new Date());
 
   return {
     year: parts.find((p) => p.type === "year").value,
     month: parts.find((p) => p.type === "month").value,
     day: parts.find((p) => p.type === "day").value,
+    hour: parts.find((p) => p.type === "hour").value,
   };
 }
 
@@ -36,6 +39,16 @@ function getCurrentMonthKeyET() {
 /** Day of the month in Eastern Time. */
 function getCurrentDayET() {
   return Number(etParts().day);
+}
+
+/**
+ * Hour of the day in Eastern Time, 0-23.
+ *
+ * `hourCycle: "h23"` matters: the default for en-US is h12, which renders
+ * midnight as "24" and would put the greeting an hour out once a day.
+ */
+function getCurrentHourET() {
+  return Number(etParts().hour);
 }
 
 /** Days in a month. `month` is 1-based, so February is 2. */
@@ -53,6 +66,7 @@ function getPreviousMonthKey(monthKey) {
 module.exports = {
   getCurrentMonthKeyET,
   getCurrentDayET,
+  getCurrentHourET,
   getDaysInMonth,
   getPreviousMonthKey,
 };

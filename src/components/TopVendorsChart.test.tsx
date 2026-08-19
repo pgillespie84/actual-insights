@@ -8,9 +8,9 @@ const stubData = [
   { payee: "Kroger", amount: 18000 },
 ];
 
-test("renders Top Vendors heading", () => {
+test("renders the Top vendors heading", () => {
   render(<TopVendorsChart data={stubData} />);
-  expect(screen.getByText("Top Vendors")).toBeInTheDocument();
+  expect(screen.getByText("Top vendors")).toBeInTheDocument();
 });
 
 test("card uses flex-col layout", () => {
