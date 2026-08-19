@@ -110,22 +110,39 @@ test("getPayableDebtAccountNames excludes the mortgage", () => {
 // same config took /api/dashboard to a 500 instead. Neither told the reader
 // which setting was at fault.
 test("requireGroup returns the configured names", () => {
-  expect(requireGroup({ Savings: ["General", "Long Term"] }, "Savings")).toEqual([
+  expect(
+    requireGroup({ Savings: ["General", "Long Term"] }, "Savings", "NET_WORTH_GROUPS"),
+  ).toEqual([
     "General",
     "Long Term",
   ]);
 });
 
 test("requireGroup names the missing setting in the error", () => {
-  expect(() => requireGroup({}, "Savings")).toThrow(/NET_WORTH_GROUPS\["Savings"\]/);
+  expect(() => requireGroup({}, "Savings", "NET_WORTH_GROUPS")).toThrow(
+    /NET_WORTH_GROUPS\["Savings"\]/,
+  );
+});
+
+// The map is a parameter, so the message must be too. Hardcoding one setting
+// name would eventually point at the wrong one, which is the exact failure
+// this function exists to remove.
+test("requireGroup names whichever setting it was given", () => {
+  expect(() => requireGroup({}, "Fixed", "BUDGET_BUCKETS")).toThrow(
+    /BUDGET_BUCKETS\["Fixed"\]/,
+  );
 });
 
 test("requireGroup rejects a group that is present but not a list", () => {
   expect(() =>
-    requireGroup({ Savings: "General" } as unknown as Record<string, string[]>, "Savings"),
+    requireGroup(
+      { Savings: "General" } as unknown as Record<string, string[]>,
+      "Savings",
+      "NET_WORTH_GROUPS",
+    ),
   ).toThrow(/NET_WORTH_GROUPS\["Savings"\]/);
 });
 
 test("requireGroup accepts a deliberately empty group", () => {
-  expect(requireGroup({ Savings: [] }, "Savings")).toEqual([]);
+  expect(requireGroup({ Savings: [] }, "Savings", "NET_WORTH_GROUPS")).toEqual([]);
 });

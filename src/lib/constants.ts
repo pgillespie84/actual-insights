@@ -53,16 +53,19 @@ export const EXCLUDED_ACCOUNTS: string[] = config.EXCLUDED_ACCOUNTS;
  * 500 on the whole dashboard. Neither told the reader which setting was wrong.
  *
  * Failing loudly is the right call on a financial figure, but it has to name
- * the setting. `checkConfigHealth` reports the same problem on the admin page.
+ * the setting — which is why the caller passes it rather than this hardcoding
+ * one map. `checkConfigHealth` reports both conditions on the admin page, so a
+ * bad config is visible before a request reaches this.
  */
 export function requireGroup(
   groups: Record<string, string[]>,
   key: string,
+  settingName: string,
 ): string[] {
   const names = groups[key];
   if (!Array.isArray(names)) {
     throw new Error(
-      `Config is missing NET_WORTH_GROUPS["${key}"], or it is not a list of ` +
+      `Config is missing ${settingName}["${key}"], or it is not a list of ` +
         `account names. Add it to the dashboard config — this metric cannot ` +
         `be computed without it.`,
     );
@@ -71,11 +74,11 @@ export function requireGroup(
 }
 
 export function getSavingsAccountNames(): string[] {
-  return requireGroup(NET_WORTH_GROUPS, "Savings");
+  return requireGroup(NET_WORTH_GROUPS, "Savings", "NET_WORTH_GROUPS");
 }
 
 export function getNonMortgageDebtAccountNames(): string[] {
-  return requireGroup(NET_WORTH_GROUPS, "Debt — Loans");
+  return requireGroup(NET_WORTH_GROUPS, "Debt — Loans", "NET_WORTH_GROUPS");
 }
 
 /**
@@ -87,14 +90,14 @@ export function getNonMortgageDebtAccountNames(): string[] {
  */
 export function getPayableDebtAccountNames(): string[] {
   return [
-    ...requireGroup(NET_WORTH_GROUPS, "Debt — Loans"),
-    ...requireGroup(NET_WORTH_GROUPS, "Debt — Credit Cards"),
+    ...requireGroup(NET_WORTH_GROUPS, "Debt — Loans", "NET_WORTH_GROUPS"),
+    ...requireGroup(NET_WORTH_GROUPS, "Debt — Credit Cards", "NET_WORTH_GROUPS"),
   ];
 }
 
 export function getInvestmentAccountNames(): string[] {
   return [
-    ...requireGroup(NET_WORTH_GROUPS, "Retirement"),
-    ...requireGroup(NET_WORTH_GROUPS, "Taxable Investments"),
+    ...requireGroup(NET_WORTH_GROUPS, "Retirement", "NET_WORTH_GROUPS"),
+    ...requireGroup(NET_WORTH_GROUPS, "Taxable Investments", "NET_WORTH_GROUPS"),
   ];
 }
