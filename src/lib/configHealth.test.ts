@@ -95,3 +95,50 @@ test("a NET_WORTH_GROUPS key the code indexes by hand is required", () => {
     },
   ]);
 });
+
+// requireGroup throws on a value that is present but not a list, so the admin
+// page has to catch that too — otherwise the check that exists to pre-empt the
+// failure passes and the dashboard 500s anyway.
+test("a required group present as a bare string is reported as malformed", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: {
+        ...requiredGroups,
+        Savings: "General Savings" as unknown as string[],
+      },
+    },
+    db,
+  );
+
+  expect(problems).toEqual([
+    {
+      setting: "NET_WORTH_GROUPS.Savings",
+      value: '"General Savings"',
+      kind: "malformed-group",
+    },
+  ]);
+});
+
+// The old code passed the string straight into the name loop, whose
+// `for (const value of values)` iterates characters — one bogus row per letter.
+test("a malformed group is reported once, not once per character", () => {
+  const problems = checkConfigHealth(
+    {
+      NET_WORTH_GROUPS: { ...requiredGroups, Savings: "General" as unknown as string[] },
+    },
+    db,
+  );
+
+  expect(problems).toHaveLength(1);
+});
+
+test("a required group present as null is reported as malformed", () => {
+  const problems = checkConfigHealth(
+    { NET_WORTH_GROUPS: { ...requiredGroups, Savings: null as unknown as string[] } },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "NET_WORTH_GROUPS.Savings", value: "null", kind: "malformed-group" },
+  ]);
+});

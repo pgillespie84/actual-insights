@@ -9,11 +9,20 @@
  * This is the only thing that surfaces those.
  */
 
-export type ProblemKind =
-  | "unknown-account"
-  | "unknown-category"
-  | "unknown-group"
-  | "missing-required-group";
+/**
+ * Kinds that mean "this configured name matched nothing in the database".
+ * These are the only ones `report` can produce, since it works by set
+ * membership against a table of real names.
+ */
+type NameKind = "unknown-account" | "unknown-category" | "unknown-group";
+
+/**
+ * Kinds that describe the shape of the config itself rather than a name that
+ * failed to match, so no database lookup applies.
+ */
+type ShapeKind = "missing-required-group" | "malformed-group";
+
+export type ProblemKind = NameKind | ShapeKind;
 
 /**
  * constants.ts reads these keys by hand, through `requireGroup`, so a config
@@ -59,14 +68,13 @@ export function checkConfigHealth(
   db: DatabaseNames,
 ): ConfigProblem[] {
   const problems: ConfigProblem[] = [];
-  const known: Record<ProblemKind, Set<string>> = {
+  const known: Record<NameKind, Set<string>> = {
     "unknown-account": new Set(db.accountNames),
     "unknown-category": new Set(db.categoryNames),
     "unknown-group": new Set(db.groupNames),
-    "missing-required-group": new Set(),
   };
 
-  const report = (setting: string, values: string[], kind: ProblemKind) => {
+  const report = (setting: string, values: string[], kind: NameKind) => {
     for (const value of values) {
       if (!known[kind].has(value)) problems.push({ setting, value, kind });
     }
@@ -84,6 +92,18 @@ export function checkConfigHealth(
   }
 
   for (const [group, names] of Object.entries(netWorthGroups)) {
+    // requireGroup throws on a value that is present but not a list, so this
+    // has to catch it too — otherwise the check that exists to pre-empt that
+    // failure passes and the dashboard 500s anyway. Reported once: passing a
+    // string into report() iterates its characters, one bogus row per letter.
+    if (!Array.isArray(names)) {
+      problems.push({
+        setting: `NET_WORTH_GROUPS.${group}`,
+        value: JSON.stringify(names) ?? String(names),
+        kind: "malformed-group",
+      });
+      continue;
+    }
     report(`NET_WORTH_GROUPS.${group}`, names, "unknown-account");
   }
 
