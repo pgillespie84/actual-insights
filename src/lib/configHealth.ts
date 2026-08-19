@@ -16,8 +16,13 @@ export type ProblemKind =
   | "missing-required-group";
 
 /**
- * constants.ts indexes these keys directly and spreads the result, so a config
- * without one of them throws at import rather than degrading.
+ * constants.ts reads these keys by hand, through `requireGroup`, so a config
+ * without one of them throws when the metric is computed — naming the setting —
+ * rather than degrading into a wrong number.
+ *
+ * Not at import, despite what this comment used to say: they are function
+ * bodies, so nothing evaluates until a query calls them. This list is what
+ * surfaces the same problem on the admin page before a request hits it.
  */
 const REQUIRED_NET_WORTH_GROUPS = [
   "Savings",

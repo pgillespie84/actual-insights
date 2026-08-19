@@ -9,6 +9,7 @@ import {
   getSavingsAccountNames,
   getNonMortgageDebtAccountNames,
   getPayableDebtAccountNames,
+  requireGroup,
   getInvestmentAccountNames,
   NET_WORTH_GROUPS,
 } from "./constants.ts";
@@ -100,4 +101,31 @@ test("getPayableDebtAccountNames excludes the mortgage", () => {
   for (const name of mortgages) {
     expect(getPayableDebtAccountNames()).not.toContain(name);
   }
+});
+
+// A config missing one of the hand-indexed groups used to fail in whichever
+// way the caller happened to break. getSavingsAccountNames returned undefined,
+// Prisma dropped an `in: undefined` filter and matched every account — a
+// confident wrong number — and once coverage started calling .every on it, the
+// same config took /api/dashboard to a 500 instead. Neither told the reader
+// which setting was at fault.
+test("requireGroup returns the configured names", () => {
+  expect(requireGroup({ Savings: ["General", "Long Term"] }, "Savings")).toEqual([
+    "General",
+    "Long Term",
+  ]);
+});
+
+test("requireGroup names the missing setting in the error", () => {
+  expect(() => requireGroup({}, "Savings")).toThrow(/NET_WORTH_GROUPS\["Savings"\]/);
+});
+
+test("requireGroup rejects a group that is present but not a list", () => {
+  expect(() =>
+    requireGroup({ Savings: "General" } as unknown as Record<string, string[]>, "Savings"),
+  ).toThrow(/NET_WORTH_GROUPS\["Savings"\]/);
+});
+
+test("requireGroup accepts a deliberately empty group", () => {
+  expect(requireGroup({ Savings: [] }, "Savings")).toEqual([]);
 });
