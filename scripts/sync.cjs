@@ -6,6 +6,8 @@ require("dotenv").config({ override: true });
 
 const { loadConfig } = require("../src/lib/loadConfig.cjs");
 const { insertRows } = require("../src/lib/batchInsert.cjs");
+const { formatBudgetMonthLines } = require("../src/lib/budgetSummary.cjs");
+const { getCurrentMonthKeyET } = require("../src/lib/timezone.cjs");
 
 const { SKIP_CATEGORIES, SKIP_INCOME } = loadConfig();
 
@@ -152,7 +154,15 @@ async function main() {
       conflictTarget: ["categoryId", "month"],
     }, budgetRows);
     const budgetCount = budgetRows.length;
-    console.log(`  ${budgetCount} budget entries synced`);
+    // budgetMonths goes in alongside the rows so a month that was read and came
+    // back empty is reported rather than silently missing. See budgetSummary.
+    for (const line of formatBudgetMonthLines({
+      months: budgetMonths,
+      rows: budgetRows,
+      currentMonth: getCurrentMonthKeyET(),
+    })) {
+      console.log(line);
+    }
     totalRecords += budgetCount;
 
     // 6. Log the sync
