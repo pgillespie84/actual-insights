@@ -73,6 +73,7 @@ COPY --from=builder /app/src/lib/backfill.cjs ./src/lib/backfill.cjs
 COPY --from=builder /app/src/lib/timezone.cjs ./src/lib/timezone.cjs
 COPY --from=builder /app/src/lib/insightData.cjs ./src/lib/insightData.cjs
 COPY --from=builder /app/src/lib/batchInsert.cjs ./src/lib/batchInsert.cjs
+COPY --from=builder /app/src/lib/budgetSummary.cjs ./src/lib/budgetSummary.cjs
 COPY --from=builder /app/config/dashboard.example.json ./config/dashboard.example.json
 # Runtime deps only. This used to copy the full dev tree from the builder,
 # which overwrote the standalone bundle's own node_modules and shipped every
