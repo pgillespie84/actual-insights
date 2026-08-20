@@ -6,7 +6,8 @@ require("dotenv").config({ override: true });
 
 const { loadConfig } = require("../src/lib/loadConfig.cjs");
 const { insertRows } = require("../src/lib/batchInsert.cjs");
-const { summariseBudgetMonths } = require("../src/lib/budgetSummary.cjs");
+const { formatBudgetMonthLines } = require("../src/lib/budgetSummary.cjs");
+const { getCurrentMonthKeyET } = require("../src/lib/timezone.cjs");
 
 const { SKIP_CATEGORIES, SKIP_INCOME } = loadConfig();
 
@@ -153,17 +154,14 @@ async function main() {
       conflictTarget: ["categoryId", "month"],
     }, budgetRows);
     const budgetCount = budgetRows.length;
-    const monthly = summariseBudgetMonths(budgetRows);
-    console.log(`  ${budgetCount} budget entries synced across ${monthly.length} months`);
-    // One line per month, because the total alone cannot say whether a given
-    // month came through empty or was never read at all.
-    for (const m of monthly) {
-      const dollars = (m.totalCents / 100).toFixed(2);
-      console.log(`    ${m.month}  ${m.rows} categories, ${m.funded} budgeted, $${dollars}`);
-    }
-    const unbudgeted = monthly.filter((m) => m.funded === 0).map((m) => m.month);
-    if (unbudgeted.length > 0) {
-      console.log(`  no budgeted amount in any category for: ${unbudgeted.join(", ")}`);
+    // budgetMonths goes in alongside the rows so a month that was read and came
+    // back empty is reported rather than silently missing. See budgetSummary.
+    for (const line of formatBudgetMonthLines({
+      months: budgetMonths,
+      rows: budgetRows,
+      currentMonth: getCurrentMonthKeyET(),
+    })) {
+      console.log(line);
     }
     totalRecords += budgetCount;
 
