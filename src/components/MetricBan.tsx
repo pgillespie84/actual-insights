@@ -38,7 +38,8 @@ const DETAIL_TONE: Record<Tone, string> = {
  * The row stays three columns at every width — stacking pushes the spending
  * chart below a screen of header — so the figures have to fit a phone column.
  * At 375px each card gets (375 − 32 page padding − 16 gutters) / 3 ≈ 109px,
- * and p-2 leaves about 93px of that for content. Measured in the browser at
+ * and p-2 plus the card's 1px border leaves about 91px of that for content.
+ * Both figures here are content width after padding and border. Measured at
  * that width: "$18,341" is 61px at text-base and "$1,182,341" is 84px, where
  * the desktop text-3xl would need about 115px. That 30px size at every width
  * is what used to overflow the cards.
@@ -67,6 +68,10 @@ export function MetricBan({
     <div className="widget-card p-2 sm:p-5">
       <p className="eyebrow">{label}</p>
       <p
+        // Truncation hides digits on a financial figure, so give a pointer the
+        // full string back. The device where it actually truncates has no
+        // hover, but a zoomed desktop does.
+        title={headline}
         className={`mt-1 truncate font-sans text-base font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-3xl ${TEXT_TONE[valueTone]}`}
       >
         {headline}
