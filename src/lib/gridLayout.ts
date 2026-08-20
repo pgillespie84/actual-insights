@@ -1,12 +1,13 @@
 /**
  * The metric row: three equal boxes, side by side at every width.
  *
- * They do not stack on a phone. Three short numbers read fine at that width,
- * and stacking them would push the spending chart below a screen of header.
- * Only the gap changes for print.
+ * They do not stack on a phone. Stacking would push the spending chart below a
+ * screen of header, so the type shrinks instead — see MetricBan, which carries
+ * the width arithmetic. Only the gap changes below `sm`, where 16px of gutter
+ * is worth more as card width.
  */
 export function banRowGridClass(isPrint: boolean): string {
-  return `grid grid-cols-3 ${isPrint ? "gap-3" : "gap-4"}`;
+  return `grid grid-cols-3 ${isPrint ? "gap-3" : "gap-2 sm:gap-4"}`;
 }
 
 export function bottomRowGridClass(isPrint: boolean, hasSpotlights: boolean): string {
