@@ -7,7 +7,7 @@
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <Overview>Financial dashboard syncing data from Actual Budget into PostgreSQL, with AI-generated insights and PDF email reports.</Overview>
-  <Icon>https://raw.githubusercontent.com/pgillespie84/actual-insights/main/public/favicon.ico</Icon>
+  <Icon>https://raw.githubusercontent.com/pgillespie84/actual-insights/main/public/icon.png</Icon>
 
   <Config Name="Web UI Port" Target="3000" Default="3100" Mode="tcp" Description="Port to access the dashboard." Type="Port" Display="always" Required="true" Mask="false">3100</Config>
 
