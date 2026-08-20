@@ -6,7 +6,7 @@ import { summariseBudgetMonths, formatBudgetMonthLines } from "./budgetSummary.c
 // debugging session: Actual had no August budget, and the log could not say
 // whether the step had run.
 
-test("counts rows, funded categories and the month total", () => {
+test("counts categories, funded categories and the month total", () => {
   const summary = summariseBudgetMonths([
     ["2026-07", 160000, "grocery"],
     ["2026-07", 0, "tools"],
@@ -14,19 +14,19 @@ test("counts rows, funded categories and the month total", () => {
   ]);
 
   expect(summary).toEqual([
-    { month: "2026-07", rows: 3, funded: 2, totalCents: 333886 },
+    { month: "2026-07", categoryCount: 3, funded: 2, totalCents: 333886 },
   ]);
 });
 
 // The distinction the whole change exists for.
-test("a month present but entirely unbudgeted reports rows with no funding", () => {
+test("a month present but entirely unbudgeted reports categories with no funding", () => {
   const summary = summariseBudgetMonths([
     ["2026-08", 0, "grocery"],
     ["2026-08", 0, "mortgage"],
   ]);
 
   expect(summary).toEqual([
-    { month: "2026-08", rows: 2, funded: 0, totalCents: 0 },
+    { month: "2026-08", categoryCount: 2, funded: 0, totalCents: 0 },
   ]);
 });
 
@@ -46,7 +46,12 @@ test("months come back in the order they were first seen", () => {
   ]);
 
   expect(summary.map((m) => m.month)).toEqual(["2026-07", "2026-08"]);
-  expect(summary[0]).toEqual({ month: "2026-07", rows: 2, funded: 2, totalCents: 400 });
+  expect(summary[0]).toEqual({
+    month: "2026-07",
+    categoryCount: 2,
+    funded: 2,
+    totalCents: 400,
+  });
 });
 
 // Actual returns negative budgeted amounts when money is moved back out of a
@@ -56,7 +61,7 @@ test("negative amounts count as funded and reduce the total", () => {
     ["2026-07", -49776, "pocket-money"],
     ["2026-07", 60000, "grocery"],
   ])).toEqual([
-    { month: "2026-07", rows: 2, funded: 2, totalCents: 10224 },
+    { month: "2026-07", categoryCount: 2, funded: 2, totalCents: 10224 },
   ]);
 });
 
@@ -128,7 +133,7 @@ test("the alert reaches past months outside the detail window", () => {
     months,
     rows: months.filter((m) => m !== "2025-01").map((m) => [m, 5000, "grocery"] as [string, number, string]),
     currentMonth: "2026-08",
-    window: 3,
+    detailMonths: 3,
   });
 
   expect(lines.some((l) => /^ {4}2025-01 /.test(l))).toBe(false);
@@ -143,7 +148,7 @@ test("months outside the window are rolled into one line rather than printed", (
     months,
     rows: months.map((m) => [m, m === "2026-09" ? 0 : 5000, "grocery"] as [string, number, string]),
     currentMonth: "2026-08",
-    window: 2,
+    detailMonths: 2,
   });
 
   const detail = lines.filter((l) => /^ {4}\d{4}-\d{2} /.test(l));
@@ -187,12 +192,12 @@ test("no warning when the current month is present", () => {
 
 // slice(-0) is slice(0), so the obvious way to write this returns every month
 // rather than none — the opposite of what a caller asking for no detail wants.
-test("a window of zero prints no detail lines", () => {
+test("a detailMonths of zero prints no detail lines", () => {
   const lines = formatBudgetMonthLines({
     months: ["2026-07", "2026-08"],
     rows: [["2026-07", 100, "a"], ["2026-08", 200, "b"]],
     currentMonth: "2026-08",
-    window: 0,
+    detailMonths: 0,
   });
 
   expect(lines.filter((l) => /^ {4}\d{4}-\d{2} /.test(l))).toEqual([]);
@@ -211,6 +216,24 @@ test("a long unbudgeted list drops the oldest months, never the newest", () => {
   expect(alert).toContain("2025-12");
   expect(alert).toContain("(+6 earlier)");
   expect(alert).not.toContain("2025-01");
+});
+
+// This pins one path and not the other, which is worth being plain about.
+// Passing `size` down to the alert would fail here. Pointing the alert back at
+// DEFAULT_DETAIL_MONTHS would not, because both constants are 6 — no test can
+// separate them while the numbers match, and the comment on them says so.
+test("the alert is not shortened by a caller asking for less detail", () => {
+  const months = Array.from({ length: 12 }, (_, i) => `2025-${String(i + 1).padStart(2, "0")}`);
+  const lines = formatBudgetMonthLines({
+    months,
+    rows: [],
+    currentMonth: "2026-08",
+    detailMonths: 1,
+  });
+  const alert = lines.find((l) => l.includes("no budgeted amount")) ?? "";
+
+  expect(alert).toContain("(+6 earlier)");
+  expect(alert).toContain("2025-07");
 });
 
 test("the current month is always named when it is unbudgeted", () => {
@@ -238,13 +261,13 @@ test("a repeated month prints one detail line, not two", () => {
 
 // Math.max survives NaN, NaN === 0 is false, and slice(-NaN) is slice(0) —
 // which prints every month, the failure the window exists to prevent.
-test("a non-integer window falls back to the default rather than printing everything", () => {
+test("a non-integer detailMonths falls back to the default rather than printing everything", () => {
   const months = Array.from({ length: 12 }, (_, i) => `2025-${String(i + 1).padStart(2, "0")}`);
   const lines = formatBudgetMonthLines({
     months,
     rows: months.map((m) => [m, 100, "a"] as [string, number, string]),
     currentMonth: "2026-08",
-    window: Number.NaN,
+    detailMonths: Number.NaN,
   });
 
   expect(lines.filter((l) => /^ {4}\d{4}-\d{2} /.test(l))).toHaveLength(6);
@@ -256,7 +279,7 @@ test("the roll-up line breaks the hidden months into budgeted and not", () => {
     months,
     rows: [["2026-03", 5000, "a"], ["2026-04", 0, "b"], ["2026-05", 0, "c"]],
     currentMonth: "2026-08",
-    window: 3,
+    detailMonths: 3,
   });
 
   expect(lines.join("\n")).toContain("3 other months not shown (1 budgeted, 2 not budgeted)");

@@ -1,3 +1,15 @@
+// Two bounds on two different things: how many months get a detail line, and
+// how many the unbudgeted alert names on its one line. The first is about how
+// much of docker logs a six-hourly sync spends, the second about how long a
+// single line gets. They were one constant, which read as the alert obeying
+// the detail window — it never did, but the name said otherwise.
+//
+// Both are 6 by coincidence rather than by any shared reason, and nothing
+// enforces that they stay equal. A test cannot tell them apart while the
+// numbers match; change one when its own argument changes.
+const DEFAULT_DETAIL_MONTHS = 6;
+const ALERT_LIMIT = 6;
+
 /**
  * Per-month counts for the budget rows a sync is about to write.
  *
@@ -8,25 +20,24 @@
  * state in a tracking budget, where nothing carries forward, so the log has to
  * tell the two apart rather than leaving it to be guessed.
  *
- * `funded` is the count that matters: rows is how many categories the month
- * returned, funded is how many carry a non-zero amount.
+ * `funded` is the count that matters: categoryCount is how many categories the
+ * month returned, funded is how many carry a non-zero amount.
  *
  * @param {Array<[string, number, string]>} rows [month, budgetedAmount, categoryId]
- * @returns {Array<{month: string, rows: number, funded: number, totalCents: number}>}
+ * @returns {Array<{month: string, categoryCount: number, funded: number,
+ *   totalCents: number}>}
  *   one entry per month, in the order the months were first seen
  */
-const DEFAULT_WINDOW = 6;
-
 function summariseBudgetMonths(rows) {
   const byMonth = new Map();
 
   for (const [month, amount] of rows) {
     let entry = byMonth.get(month);
     if (entry === undefined) {
-      entry = { month, rows: 0, funded: 0, totalCents: 0 };
+      entry = { month, categoryCount: 0, funded: 0, totalCents: 0 };
       byMonth.set(month, entry);
     }
-    entry.rows += 1;
+    entry.categoryCount += 1;
     // Negative is funded too: Actual writes one when money moves back out of a
     // category, and it still means someone budgeted this month.
     if (amount !== 0) entry.funded += 1;
@@ -58,13 +69,18 @@ function summariseBudgetMonths(rows) {
  * month with nothing budgeted is worth hearing about wherever it falls.
  *
  * @param {{months: string[], rows: Array<[string, number, string]>,
- *   currentMonth: string, window?: number}} input
+ *   currentMonth: string, detailMonths?: number}} input
  * @returns {string[]}
  */
-function formatBudgetMonthLines({ months, rows, currentMonth, window = DEFAULT_WINDOW }) {
+function formatBudgetMonthLines({
+  months,
+  rows,
+  currentMonth,
+  detailMonths = DEFAULT_DETAIL_MONTHS,
+}) {
   const byMonth = new Map(summariseBudgetMonths(rows).map((m) => [m.month, m]));
   const at = (month) =>
-    byMonth.get(month) ?? { month, rows: 0, funded: 0, totalCents: 0 };
+    byMonth.get(month) ?? { month, categoryCount: 0, funded: 0, totalCents: 0 };
 
   // YYYY-MM sorts and compares correctly as a string, so no date parsing.
   // Deduped because the roll-up below reasons about repeated month keys, and a
@@ -74,7 +90,9 @@ function formatBudgetMonthLines({ months, rows, currentMonth, window = DEFAULT_W
   // slice(0) and returns everything, so the obvious spelling gives a caller
   // asking for no detail the most output there is. NaN survives Math.max and
   // slices from 0 for the same reason, hence the integer guard.
-  const size = Number.isInteger(window) ? window : DEFAULT_WINDOW;
+  const size = Number.isInteger(detailMonths)
+    ? detailMonths
+    : DEFAULT_DETAIL_MONTHS;
   const detail = upToNow.slice(Math.max(0, upToNow.length - size));
   const shown = new Set(detail);
 
@@ -86,7 +104,7 @@ function formatBudgetMonthLines({ months, rows, currentMonth, window = DEFAULT_W
   for (const month of detail) {
     const m = at(month);
     lines.push(
-      `    ${m.month}  ${plural(m.rows, "category", "categories")}, ` +
+      `    ${m.month}  ${plural(m.categoryCount, "category", "categories")}, ` +
         `${m.funded} budgeted, ${dollars(m.totalCents)}`
     );
   }
@@ -131,18 +149,20 @@ function dollars(cents) {
 }
 
 /**
- * The alert reaches every past month on purpose, but its length is bounded by
- * the age of the budget file rather than by the detail window, so an imported
- * history would put an unbounded list on one line four times a day.
+ * The alert reaches every past month on purpose, so its length answers to the
+ * age of the budget file and an imported history would put an unbounded list
+ * on one line four times a day. ALERT_LIMIT is what caps it. The detail window
+ * is a separate bound and is never applied here.
  *
  * The oldest months are the ones dropped. Capping the other way round read
  * naturally and was wrong: `months` arrives ascending, so a file with a long
  * unbudgeted history pushed the newest months — the current one among them —
  * off the end, in precisely the case the cap exists for.
  */
-function truncate(months, limit = DEFAULT_WINDOW) {
-  if (months.length <= limit) return months.join(", ");
-  return `(+${months.length - limit} earlier) ${months.slice(-limit).join(", ")}`;
+function truncate(months) {
+  if (months.length <= ALERT_LIMIT) return months.join(", ");
+  const dropped = months.length - ALERT_LIMIT;
+  return `(+${dropped} earlier) ${months.slice(-ALERT_LIMIT).join(", ")}`;
 }
 
 module.exports = { summariseBudgetMonths, formatBudgetMonthLines };
