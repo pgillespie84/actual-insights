@@ -26,22 +26,28 @@ const TEXT_TONE: Record<Tone, string> = {
   neutral: "text-text-primary",
 };
 
-/**
- * Type sizes are set by what fits three-across on a phone, not by taste.
- *
- * At 375px each card gets (375 − 48 page padding − 16 gutters) / 3 ≈ 104px,
- * and p-2.5 leaves about 84px of that for content. Geist semibold runs about
- * 3.8× the font size for a seven-character figure, so $18,341 needs ~69px at
- * 18px (text-lg) and would need ~115px at the desktop 30px — which is why the
- * old unconditional text-3xl overflowed its card. text-lg leaves headroom for
- * a six-figure balance; anything larger does not.
- */
 const DETAIL_TONE: Record<Tone, string> = {
   positive: "text-positive",
   negative: "text-negative",
   neutral: "text-text-secondary",
 };
 
+/**
+ * Type sizes are set by what fits three-across on a phone, not by taste.
+ *
+ * The row stays three columns at every width — stacking pushes the spending
+ * chart below a screen of header — so the figures have to fit a phone column.
+ * At 375px each card gets (375 − 32 page padding − 16 gutters) / 3 ≈ 109px,
+ * and p-2 leaves about 93px of that for content. Measured in the browser at
+ * that width: "$18,341" is 61px at text-base and "$1,182,341" is 84px, where
+ * the desktop text-3xl would need about 115px. That 30px size at every width
+ * is what used to overflow the cards.
+ *
+ * text-base is therefore the ceiling, not a preference. Narrower phones make
+ * it tighter still — a 320px screen leaves 73px, under the 92px a signed
+ * seven-figure value needs — so the headline truncates rather than spilling
+ * back out of its card.
+ */
 export function MetricBan({
   label,
   value,
@@ -61,7 +67,7 @@ export function MetricBan({
     <div className="widget-card p-2 sm:p-5">
       <p className="eyebrow">{label}</p>
       <p
-        className={`mt-1 font-sans text-base font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-3xl ${TEXT_TONE[valueTone]}`}
+        className={`mt-1 truncate font-sans text-base font-semibold tabular-nums tracking-tight sm:mt-2 sm:text-3xl ${TEXT_TONE[valueTone]}`}
       >
         {headline}
       </p>

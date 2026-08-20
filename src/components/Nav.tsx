@@ -19,8 +19,14 @@ const links = [
  * 375px screen that pushed Analytics, Admin and the toggle off the right edge
  * and made the whole document scroll sideways — every page under it inherited
  * the horizontal scroll, not just the nav. The links get their own row below
- * the wordmark instead, as a five-column grid so nothing is hidden behind a
- * scroll gesture.
+ * the wordmark instead.
+ *
+ * That row wraps rather than dividing into fixed tracks. An equal-width grid
+ * looked right at 375px and broke at 320px, where a five-way split gives 51px
+ * to a "Dashboard" label that needs 65px: the labels spilled their tracks
+ * instead of the page scrolling, so the symptom moved rather than went away.
+ * Wrapping also keeps the row honest if `links` gains or loses an entry, which
+ * a hardcoded column count would not.
  */
 export function Nav() {
   const pathname = usePathname();
@@ -30,7 +36,7 @@ export function Nav() {
 
   return (
     <nav className="border-b border-card-border bg-card-bg backdrop-blur-sm">
-      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-6 py-3 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:py-0">
+      <div className="mx-auto flex max-w-7xl flex-col gap-2 px-4 py-3 sm:px-6 sm:h-16 sm:flex-row sm:items-center sm:justify-between sm:gap-0 sm:py-0">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-soft text-accent">
@@ -46,14 +52,14 @@ export function Nav() {
           </div>
         </div>
 
-        <div className="grid grid-cols-5 gap-1 sm:flex sm:items-center">
+        <div className="flex flex-wrap items-center gap-1 sm:flex-nowrap">
           {links.map((link) => {
             const isActive = pathname === link.href;
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-lg px-1 py-2 text-center text-xs font-medium transition-colors sm:px-4 sm:text-sm ${
+                className={`rounded-lg px-2 py-2.5 text-center text-xs font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm ${
                   isActive
                     ? "bg-hover-bg text-text-primary"
                     : "text-text-secondary hover:text-text-primary hover:bg-hover-bg"
