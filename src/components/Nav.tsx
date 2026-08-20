@@ -13,7 +13,7 @@ const links = [
 ];
 
 /**
- * Two rows on a phone, one bar from `sm` up.
+ * Two or three rows on a phone, one bar from `sm` up.
  *
  * Five links plus the wordmark and the theme toggle need about 630px. On a
  * 375px screen that pushed Analytics, Admin and the toggle off the right edge
@@ -27,6 +27,15 @@ const links = [
  * instead of the page scrolling, so the symptom moved rather than went away.
  * Wrapping also keeps the row honest if `links` gains or loses an entry, which
  * a hardcoded column count would not.
+ *
+ * The link padding steps up in two stages rather than one. At exactly 640px —
+ * the narrowest width the single bar ever has to hold everything — the
+ * wordmark, five sm:px-4 links and the toggle come to 608px against a 592px
+ * content box. It did not scroll the document, because the bar's own right
+ * padding absorbed the overflow and the toggle sat flush to the edge, which is
+ * the kind of miss that only shows up if you measure at the breakpoint itself.
+ * sm:px-3 buys 40px back across the five links; md:px-4 restores the roomier
+ * spacing once there is width for it.
  */
 export function Nav() {
   const pathname = usePathname();
@@ -59,7 +68,7 @@ export function Nav() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-lg px-2 py-2.5 text-center text-xs font-medium transition-colors sm:px-4 sm:py-2 sm:text-sm ${
+                className={`rounded-lg px-2 py-3 text-xs font-medium transition-colors sm:px-3 sm:py-2 sm:text-sm md:px-4 ${
                   isActive
                     ? "bg-hover-bg text-text-primary"
                     : "text-text-secondary hover:text-text-primary hover:bg-hover-bg"
