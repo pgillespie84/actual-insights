@@ -66,31 +66,72 @@ function formatBudgetMonthLines({ months, rows, currentMonth, window = 6 }) {
 
   // YYYY-MM sorts and compares correctly as a string, so no date parsing.
   const upToNow = months.filter((m) => m <= currentMonth).sort();
-  const shown = new Set(upToNow.slice(-window));
+  // slice(-0) is slice(0) and returns everything, so a caller asking for no
+  // detail would get the most output there is. Clamp before slicing.
+  const size = Math.max(0, window);
+  const detail = size === 0 ? [] : upToNow.slice(-size);
+  const shown = new Set(detail);
 
   const lines = [
-    `  ${rows.length} budget entries synced across ${months.length} months`,
+    `  ${plural(rows.length, "budget entry", "budget entries")} synced across ` +
+      `${plural(months.length, "month", "months")}`,
   ];
 
-  for (const month of upToNow.filter((m) => shown.has(m))) {
+  for (const month of detail) {
     const m = at(month);
-    const dollars = (m.totalCents / 100).toFixed(2);
-    lines.push(`    ${m.month}  ${m.rows} categories, ${m.funded} budgeted, $${dollars}`);
+    lines.push(
+      `    ${m.month}  ${plural(m.rows, "category", "categories")}, ` +
+        `${m.funded} budgeted, ${dollars(m.totalCents)}`
+    );
   }
 
-  const rest = months.length - shown.size;
-  if (rest > 0) {
-    const others = months.filter((m) => !shown.has(m));
+  // Both halves come off the same array: deriving the count from months.length
+  // and the breakdown from a filtered copy lets them disagree if a month key
+  // ever repeats.
+  const others = months.filter((m) => !shown.has(m));
+  if (others.length > 0) {
     const funded = others.filter((m) => at(m).funded > 0).length;
-    lines.push(`    ${rest} other months not shown (${funded} budgeted, ${rest - funded} empty)`);
+    // "not budgeted" rather than "empty": most of these are future months,
+    // which are legitimately unfilled in a tracking budget.
+    lines.push(
+      `    ${plural(others.length, "other month", "other months")} not shown ` +
+        `(${funded} budgeted, ${others.length - funded} not budgeted)`
+    );
   }
 
   const unbudgeted = upToNow.filter((m) => at(m).funded === 0);
   if (unbudgeted.length > 0) {
-    lines.push(`  no budgeted amount in any category for: ${unbudgeted.join(", ")}`);
+    lines.push(`  no budgeted amount in any category for: ${truncate(unbudgeted)}`);
+  }
+
+  // The one thing this log exists to answer is whether the current month came
+  // through. Everything above is scoped to months <= currentMonth, so without
+  // this a missing current month leaves no trace at all: no detail line, and
+  // nothing for the alert to iterate.
+  if (!months.includes(currentMonth)) {
+    lines.push(`  WARNING: ${currentMonth} was not returned by getBudgetMonths`);
   }
 
   return lines;
+}
+
+function plural(n, one, many) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** Sign outside the dollar sign, so a negative total is -$16.00 not $-16.00. */
+function dollars(cents) {
+  return `${cents < 0 ? "-" : ""}$${(Math.abs(cents) / 100).toFixed(2)}`;
+}
+
+/**
+ * The alert reaches every past month on purpose, but its length is bounded by
+ * the age of the budget file rather than by the detail window, so an imported
+ * history would put an unbounded list on one line four times a day.
+ */
+function truncate(months, limit = 6) {
+  if (months.length <= limit) return months.join(", ");
+  return `${months.slice(0, limit).join(", ")} (+${months.length - limit} more)`;
 }
 
 module.exports = { summariseBudgetMonths, formatBudgetMonthLines };
