@@ -89,7 +89,17 @@ export async function mapWithConcurrency<T, R>(
 /** Months queried at once inside a single fan-out loop. */
 export const MONTH_QUERY_CONCURRENCY = 4;
 
-export function expenseCategoryFilter(): {
+/**
+ * The where-clause every expense query shares.
+ *
+ * `extraSkips` is for a query that hides more than the household-wide skip
+ * lists do. The Top vendors widget is the case: a mortgage payment is a real
+ * expense and belongs in every total, but as a vendor it is one fixed payment
+ * several times the size of any shop, so it takes the top bar and flattens the
+ * ten below it into a row of stubs. Hiding it there is a presentation choice
+ * about one chart, which is why it is a parameter rather than a wider filter.
+ */
+export function expenseCategoryFilter(extraSkips: string[] = []): {
   isIncome: false;
   hidden: false;
   name: { notIn: string[] };
@@ -97,6 +107,6 @@ export function expenseCategoryFilter(): {
   return {
     isIncome: false,
     hidden: false,
-    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME] },
+    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME, ...extraSkips] },
   };
 }

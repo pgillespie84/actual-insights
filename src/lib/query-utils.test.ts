@@ -46,6 +46,22 @@ test("expenseCategoryFilter returns skip-list where clause", () => {
   });
 });
 
+// One chart hides more than the household lists do — Top vendors drops the
+// mortgage — so the extras append rather than replace. Losing the base lists
+// here would put "Pending Transactions" back on a chart nothing else shows it
+// on, which reads as data rather than as a filter that stopped working.
+test("expenseCategoryFilter appends extra skips to the household lists", () => {
+  expect(expenseCategoryFilter(["Mortgage"])).toEqual({
+    isIncome: false,
+    hidden: false,
+    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME, "Mortgage"] },
+  });
+});
+
+test("no extra skips leaves the filter exactly as it was", () => {
+  expect(expenseCategoryFilter([])).toEqual(expenseCategoryFilter());
+});
+
 // Extracted from three API routes that carried a byte-identical copy. The
 // fallback is the interesting part: when the current ET month has no data yet
 // (early in a month, before a sync), the newest month that does is used.

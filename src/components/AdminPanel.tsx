@@ -194,9 +194,10 @@ export function AdminPanel({
               <div className="mt-4 overflow-x-auto">
                 <p className="mb-2 text-sm text-warning-text">
                   {health.problems.length} configured{" "}
-                  {health.problems.length === 1 ? "name matches" : "names match"} nothing in
-                  the database. These filter and total silently, so the numbers on the
-                  dashboard are wrong rather than missing.
+                  {health.problems.length === 1 ? "value is" : "values are"} not doing what
+                  the config says. What that costs depends on which setting it is: some
+                  stop a metric outright, some leave a confident wrong number in place of
+                  a gap, and some only change what a chart shows.
                 </p>
                 <table className="w-full text-left text-sm">
                   <thead className="text-text-secondary">

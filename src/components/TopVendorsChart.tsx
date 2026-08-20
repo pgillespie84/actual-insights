@@ -16,8 +16,17 @@ interface TopVendorsData {
   amount: number;
 }
 
+/**
+ * The prop stays required — the page has to pass it, and TypeScript should say
+ * so — but the read is guarded, because the dashboard payload's field was
+ * renamed. This bundle paired with an older or cached response body finds
+ * nothing under the new key, and an empty chart is a fair answer to that where
+ * slicing undefined takes the page down. It does nothing for the opposite
+ * skew: a tab still running the old bundle is running the old component too,
+ * and no edit here can reach it.
+ */
 export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
-  const chartData = data.slice(0, 10).map((d) => ({
+  const chartData = (data ?? []).slice(0, 10).map((d) => ({
     name: d.payee,
     amount: d.amount / 100,
   }));

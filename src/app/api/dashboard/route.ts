@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDailySpending, getTopPayees, getLastSync, getAvailableMonths, getLatestInsight, getCashFlowTrends, getMonthCashFlow, getTopExpenseCategories, getCategorySpotlight, getSavingsMetric, getDebtMetric, getInvestmentsMetric } from "@/lib/queries";
+import { getDailySpending, getTopVendors, getLastSync, getAvailableMonths, getLatestInsight, getCashFlowTrends, getMonthCashFlow, getTopExpenseCategories, getCategorySpotlight, getSavingsMetric, getDebtMetric, getInvestmentsMetric } from "@/lib/queries";
 import { CONFIG } from "@/lib/constants";
 import { getCurrentMonthKeyET } from "@/lib/timezone";
 import { resolveMonth } from "@/lib/query-utils";
@@ -20,9 +20,9 @@ export async function GET(request: NextRequest) {
     getCurrentMonthKeyET(),
   );
 
-  const [dailySpending, topPayees, lastSync, insight, cashFlowTrends, cashFlow, topExpenseCategories, categorySpotlights, savingsMetric, debtMetric, investmentsMetric] = await Promise.all([
+  const [dailySpending, topVendors, lastSync, insight, cashFlowTrends, cashFlow, topExpenseCategories, categorySpotlights, savingsMetric, debtMetric, investmentsMetric] = await Promise.all([
     getDailySpending(monthDate),
-    getTopPayees(monthDate, 10),
+    getTopVendors(monthDate, 10),
     getLastSync(),
     getLatestInsight(monthKey),
     getCashFlowTrends(4),
@@ -37,5 +37,5 @@ export async function GET(request: NextRequest) {
   // The greeting names the household, which the client cannot read for itself:
   // loadConfig.cjs resolves it off the filesystem, so it has to travel in the
   // payload rather than being imported by the page.
-  return NextResponse.json({ monthKey, household: CONFIG.HOUSEHOLD_NAMES, dailySpending, topPayees, lastSync, availableMonths, insight, cashFlowTrends, cashFlow, topExpenseCategories, categorySpotlights, savingsMetric, debtMetric, investmentsMetric });
+  return NextResponse.json({ monthKey, household: CONFIG.HOUSEHOLD_NAMES, dailySpending, topVendors, lastSync, availableMonths, insight, cashFlowTrends, cashFlow, topExpenseCategories, categorySpotlights, savingsMetric, debtMetric, investmentsMetric });
 }

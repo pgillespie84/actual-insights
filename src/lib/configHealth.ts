@@ -59,6 +59,7 @@ export interface HealthCheckConfig {
   BUDGET_BUCKETS?: Record<string, string[]>;
   SKIP_CATEGORIES?: string[];
   SKIP_INCOME?: string[];
+  SKIP_VENDOR_CATEGORIES?: string[];
   BUSINESS_CATEGORIES?: string[];
   EXCLUDED_ACCOUNTS?: string[];
 }
@@ -94,7 +95,12 @@ export function checkConfigHealth(
       return;
     }
     for (const value of values) {
-      if (!known[kind].has(value)) problems.push({ setting, value, kind });
+      if (known[kind].has(value)) continue;
+      // Rendered straight into the admin table, and React throws on an object
+      // child — which would take down the one page that explains bad config.
+      // The list is typed string[], but nothing enforces that on parsed JSON.
+      const shown = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value));
+      problems.push({ setting, value: shown, kind });
     }
   };
 
@@ -117,6 +123,10 @@ export function checkConfigHealth(
 
   report("SKIP_CATEGORIES", config.SKIP_CATEGORIES ?? [], "unknown-category");
   report("SKIP_INCOME", config.SKIP_INCOME ?? [], "unknown-category");
+  // Worth reporting even though the key is optional: a misspelled category
+  // here hides nothing from Top vendors, and a chart that ignored the setting
+  // looks exactly like a chart the setting did not apply to.
+  report("SKIP_VENDOR_CATEGORIES", config.SKIP_VENDOR_CATEGORIES ?? [], "unknown-category");
   report("BUSINESS_CATEGORIES", config.BUSINESS_CATEGORIES ?? [], "unknown-category");
   report("EXCLUDED_ACCOUNTS", config.EXCLUDED_ACCOUNTS ?? [], "unknown-account");
 

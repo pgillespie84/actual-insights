@@ -106,7 +106,7 @@ function DashboardContent() {
       <DailySpendingChart data={data.dailySpending} />
 
       <div className={bottomRowGridClass(isPrint, data.categorySpotlights.length > 0)}>
-        <TopVendorsChart data={data.topPayees} />
+        <TopVendorsChart data={data.topVendors} />
         <TopExpenseCategoriesWidget categories={data.topExpenseCategories} />
         {data.categorySpotlights.length > 0 && (
           <div className="space-y-6">

@@ -5,6 +5,7 @@ export interface DashboardConfig {
   HOUSEHOLD_NAMES: string;
   SKIP_CATEGORIES: string[];
   SKIP_INCOME: string[];
+  SKIP_VENDOR_CATEGORIES?: string[];
   BUDGET_BUCKETS: Record<string, string[]>;
   BUSINESS_CATEGORIES: string[];
   EXCLUDED_ACCOUNTS: string[];
@@ -33,6 +34,53 @@ export const CONFIG = config;
 export const SKIP_CATEGORIES: string[] = config.SKIP_CATEGORIES;
 
 export const SKIP_INCOME: string[] = config.SKIP_INCOME;
+
+/**
+ * An optional list of names, or an empty one.
+ *
+ * The `string[]` on the config interface is a claim about hand-edited JSON,
+ * not something loadConfig enforces — it is a bare JSON.parse. A bare string
+ * is the easy mistake here, since the setting is typed into an Unraid text
+ * box: `"SKIP_VENDOR_CATEGORIES": "Mortgage"` would spread character by
+ * character into the query and match nothing.
+ *
+ * The elements are checked too, not just the container. A list holding a
+ * number reaches Prisma as a `notIn` against a String column, which rejects
+ * the query — so the dashboard route 500s on a typo, where every other bad
+ * value in this file degrades to hiding nothing.
+ *
+ * A bad element costs only itself: the names either side of it still hide
+ * what they name. Dropping the whole list would leave the operator reading an
+ * admin page that blames one entry while the setting had stopped working
+ * entirely. checkConfigHealth reads the raw config rather than this, so the
+ * bad value is still reported there.
+ *
+ * Only the optional key goes through this. SKIP_CATEGORIES and the other
+ * required lists stay raw on purpose: they are load-bearing for every expense
+ * figure, and quietly emptying one would turn a config typo into wrong money
+ * on the page. Those are better off failing where the admin page can name
+ * them, which is what checkConfigHealth's malformed-list check is for.
+ */
+export function optionalNameList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((name) => typeof name === "string");
+}
+
+/**
+ * Categories the Top vendors widget hides, on top of the household skip lists.
+ *
+ * Optional, and empty when absent: every config that predates this key — the
+ * one in the running container included, which lives in DASHBOARD_CONFIG_JSON
+ * rather than in the repo — has to keep booting. Empty means the widget shows
+ * what it always showed, so a config that never sets this is not a broken one.
+ *
+ * A name here that matches no category is reported on the admin page rather
+ * than silently doing nothing, which is the failure mode that matters: the
+ * chart looks unchanged either way.
+ */
+export const SKIP_VENDOR_CATEGORIES: string[] = optionalNameList(
+  config.SKIP_VENDOR_CATEGORIES,
+);
 
 export const BUDGET_BUCKETS: Record<string, string[]> = config.BUDGET_BUCKETS;
 

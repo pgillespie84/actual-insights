@@ -55,7 +55,7 @@ docker logs actual-dashboard --since 1h  # Last hour only
 - **`scripts/generate-insight.cjs`** — Gathers month budget/spending data via SQL, sends to Claude API (`claude-sonnet-4-6`), stores result in `DailyInsight` table. Generates for current month (in-progress prompt) and previous month (completed prompt). 24-hour cache per month.
 - **`src/lib/queries.ts`** — All Prisma queries for dashboard data. Queries budgets and transactions separately then combines in JS (avoids JOIN inflation).
 - **`src/lib/loadConfig.cjs`** — Single config loader shared by the Next server code and the CJS scripts. Resolves `$DASHBOARD_CONFIG`, then `config/dashboard.json`, then `config/dashboard.example.json`.
-- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation.
+- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation. `SKIP_VENDOR_CATEGORIES` is the one optional key: it hides categories from the dashboard's Top vendors widget only, and defaults to empty so configs written before it keep booting.
 - **`src/app/(dashboard)/`** — Protected dashboard pages (route group with auth layout).
 - **`src/app/api/`** — API routes for auth, dashboard, analytics, trends.
 
@@ -72,6 +72,8 @@ docker logs actual-dashboard --since 1h  # Last hour only
 ```
 DATABASE_URL              # PostgreSQL connection string
 DASHBOARD_CONFIG          # Path to household config JSON (default: config/dashboard.json, falls back to the example). In the container: /data/config.json
+DASHBOARD_CONFIG_JSON     # The config itself, as one line of JSON. Wins over DASHBOARD_CONFIG, and is how the
+                          # Unraid container is configured — there is no file to edit there.
 ACTUAL_DATA_DIR           # Path where Actual Budget sync data is cached (default: /data in container, set via Appdata Path in Unraid UI)
 ACTUAL_SERVER_URL         # Actual Budget server (e.g. http://YOUR-SERVER-IP:5006)
 ACTUAL_PASSWORD           # Actual Budget password
