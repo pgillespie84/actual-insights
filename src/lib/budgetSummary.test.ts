@@ -200,15 +200,54 @@ test("a window of zero prints no detail lines", () => {
 
 // The alert reaches every past month deliberately, but its bound is the age of
 // the budget file, so the rendering is capped even though the reach is not.
-test("a long unbudgeted list is truncated with a count of the rest", () => {
-  const months = Array.from({ length: 15 }, (_, i) => `2025-${String(i + 1).padStart(2, "0")}`)
-    .filter((m) => m <= "2025-12");
+// It has to drop the OLDEST months: capping the other way meant that a file
+// with a long unbudgeted history pushed the current month off the end, in
+// exactly the case the cap exists for.
+test("a long unbudgeted list drops the oldest months, never the newest", () => {
+  const months = Array.from({ length: 12 }, (_, i) => `2025-${String(i + 1).padStart(2, "0")}`);
   const lines = formatBudgetMonthLines({ months, rows: [], currentMonth: "2026-08" });
   const alert = lines.find((l) => l.includes("no budgeted amount")) ?? "";
 
-  expect(alert).toContain("2025-01");
-  expect(alert).toContain("(+6 more)");
-  expect(alert).not.toContain("2025-12");
+  expect(alert).toContain("2025-12");
+  expect(alert).toContain("(+6 earlier)");
+  expect(alert).not.toContain("2025-01");
+});
+
+test("the current month is always named when it is unbudgeted", () => {
+  const months = Array.from({ length: 20 }, (_, i) => {
+    const y = 2025 + Math.floor(i / 12);
+    return `${y}-${String((i % 12) + 1).padStart(2, "0")}`;
+  }).filter((m) => m <= "2026-08");
+  const lines = formatBudgetMonthLines({ months, rows: [], currentMonth: "2026-08" });
+  const alert = lines.find((l) => l.includes("no budgeted amount")) ?? "";
+
+  expect(alert).toContain("2026-08");
+});
+
+// getBudgetMonths should never repeat a month, but the roll-up reasons about
+// repeated keys, so the detail lines have to hold the same invariant.
+test("a repeated month prints one detail line, not two", () => {
+  const lines = formatBudgetMonthLines({
+    months: ["2026-08", "2026-08"],
+    rows: [["2026-08", 100, "a"]],
+    currentMonth: "2026-08",
+  });
+
+  expect(lines.filter((l) => /^ {4}2026-08 /.test(l))).toHaveLength(1);
+});
+
+// Math.max survives NaN, NaN === 0 is false, and slice(-NaN) is slice(0) —
+// which prints every month, the failure the window exists to prevent.
+test("a non-integer window falls back to the default rather than printing everything", () => {
+  const months = Array.from({ length: 12 }, (_, i) => `2025-${String(i + 1).padStart(2, "0")}`);
+  const lines = formatBudgetMonthLines({
+    months,
+    rows: months.map((m) => [m, 100, "a"] as [string, number, string]),
+    currentMonth: "2026-08",
+    window: Number.NaN,
+  });
+
+  expect(lines.filter((l) => /^ {4}\d{4}-\d{2} /.test(l))).toHaveLength(6);
 });
 
 test("the roll-up line breaks the hidden months into budgeted and not", () => {

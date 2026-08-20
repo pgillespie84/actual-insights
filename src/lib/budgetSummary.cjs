@@ -15,6 +15,8 @@
  * @returns {Array<{month: string, rows: number, funded: number, totalCents: number}>}
  *   one entry per month, in the order the months were first seen
  */
+const DEFAULT_WINDOW = 6;
+
 function summariseBudgetMonths(rows) {
   const byMonth = new Map();
 
@@ -59,17 +61,21 @@ function summariseBudgetMonths(rows) {
  *   currentMonth: string, window?: number}} input
  * @returns {string[]}
  */
-function formatBudgetMonthLines({ months, rows, currentMonth, window = 6 }) {
+function formatBudgetMonthLines({ months, rows, currentMonth, window = DEFAULT_WINDOW }) {
   const byMonth = new Map(summariseBudgetMonths(rows).map((m) => [m.month, m]));
   const at = (month) =>
     byMonth.get(month) ?? { month, rows: 0, funded: 0, totalCents: 0 };
 
   // YYYY-MM sorts and compares correctly as a string, so no date parsing.
-  const upToNow = months.filter((m) => m <= currentMonth).sort();
-  // slice(-0) is slice(0) and returns everything, so a caller asking for no
-  // detail would get the most output there is. Clamp before slicing.
-  const size = Math.max(0, window);
-  const detail = size === 0 ? [] : upToNow.slice(-size);
+  // Deduped because the roll-up below reasons about repeated month keys, and a
+  // repeat would otherwise print the same detail line twice.
+  const upToNow = [...new Set(months.filter((m) => m <= currentMonth))].sort();
+  // Sliced from a computed start rather than a negative end: slice(-0) is
+  // slice(0) and returns everything, so the obvious spelling gives a caller
+  // asking for no detail the most output there is. NaN survives Math.max and
+  // slices from 0 for the same reason, hence the integer guard.
+  const size = Number.isInteger(window) ? window : DEFAULT_WINDOW;
+  const detail = upToNow.slice(Math.max(0, upToNow.length - size));
   const shown = new Set(detail);
 
   const lines = [
@@ -128,10 +134,15 @@ function dollars(cents) {
  * The alert reaches every past month on purpose, but its length is bounded by
  * the age of the budget file rather than by the detail window, so an imported
  * history would put an unbounded list on one line four times a day.
+ *
+ * The oldest months are the ones dropped. Capping the other way round read
+ * naturally and was wrong: `months` arrives ascending, so a file with a long
+ * unbudgeted history pushed the newest months — the current one among them —
+ * off the end, in precisely the case the cap exists for.
  */
-function truncate(months, limit = 6) {
+function truncate(months, limit = DEFAULT_WINDOW) {
   if (months.length <= limit) return months.join(", ");
-  return `${months.slice(0, limit).join(", ")} (+${months.length - limit} more)`;
+  return `(+${months.length - limit} earlier) ${months.slice(-limit).join(", ")}`;
 }
 
 module.exports = { summariseBudgetMonths, formatBudgetMonthLines };
