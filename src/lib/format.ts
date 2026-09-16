@@ -52,8 +52,23 @@ export function formatAxisDollars(dollars: number): string {
   const abs = Math.abs(dollars);
 
   if (abs >= 1_000_000) return `${sign}$${trimZero(abs / 1_000_000)}M`;
-  if (abs >= 1_000) return `${sign}$${trimZero(abs / 1_000)}k`;
-  return `${sign}$${Math.round(abs)}`;
+
+  if (abs >= 1_000) {
+    // Rounding runs after the unit is picked, so a value just under a boundary
+    // can round across it: 999,999 / 1000 rounds to 1000.0, which would print
+    // `$1000k` for what is really $1M. Promote instead, rather than emit a
+    // number that contradicts its own suffix.
+    const thousands = trimZero(abs / 1_000);
+    return Number(thousands) >= 1_000
+      ? `${sign}$${trimZero(abs / 1_000_000)}M`
+      : `${sign}$${thousands}k`;
+  }
+
+  // Math.round carries 999.5 to 1000 for the same reason.
+  const whole = Math.round(abs);
+  return whole >= 1_000
+    ? `${sign}$${trimZero(abs / 1_000)}k`
+    : `${sign}$${whole}`;
 }
 
 function trimZero(value: number): string {

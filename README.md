@@ -26,7 +26,7 @@ npm run dev
 
 The dev server is on [http://localhost:3000](http://localhost:3000). `npx prisma generate` is not optional on a fresh clone — the generated client is gitignored, and the tests and the build both fail without it.
 
-In production, install each container from its template in `unraid/` and pull the published image, `ghcr.io/pgillespie84/actual-insights:latest`. `SETUP.md` walks through it step by step, including the registry token.
+In production, install the app and browserless containers from their templates in `unraid/`, and Postgres from Community Applications. The published image is `ghcr.io/pgillespie84/actual-insights:latest`. `SETUP.md` walks through it step by step, including the registry token.
 
 Other commands:
 
