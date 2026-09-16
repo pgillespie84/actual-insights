@@ -27,9 +27,9 @@ Containers are managed individually via Unraid's **Add Container** UI — NOT do
 
 | Container | Template | Notes |
 |---|---|---|
-| `actual-dashboard` | `unraid/actual-dashboard.xml` | Next.js app on port 3100 |
-| `actual-dashboard-db` | Stock Postgres from Community Applications | Not a custom template — install `postgres:16-alpine` from CA |
-| `actual-dashboard-browserless` | `unraid/actual-dashboard-browserless.xml` | Headless Chromium for PDF rendering |
+| `actual-insights` | `unraid/actual-insights.xml` | Next.js app on port 3100 |
+| `actual-insights-db` | Stock Postgres from Community Applications | Not a custom template — install `postgres:16-alpine` from CA |
+| `actual-insights-browserless` | `unraid/actual-insights-browserless.xml` | Headless Chromium for PDF rendering |
 
 To install: Docker → Add Container → paste the raw GitHub URL of the XML file, or copy the XML files to `/boot/config/plugins/dockerMan/templates-user/` on the Unraid host.
 
@@ -37,16 +37,16 @@ All containers must be on the same Docker network so they can reach each other b
 
 **Running scripts on Unraid (exec into the running app container):**
 ```bash
-docker exec -it actual-dashboard node scripts/sync.cjs                          # Sync data from Actual Budget
-docker exec -it actual-dashboard node scripts/backfill-snapshots.cjs            # One-time: backfill account balance history
-docker exec -it actual-dashboard node scripts/generate-insight.cjs --backfill   # Regenerate all AI insights
+docker exec -it actual-insights node scripts/sync.cjs                          # Sync data from Actual Budget
+docker exec -it actual-insights node scripts/backfill-snapshots.cjs            # One-time: backfill account balance history
+docker exec -it actual-insights node scripts/generate-insight.cjs --backfill   # Regenerate all AI insights
 ```
 
 **Viewing logs:**
 ```bash
-docker logs actual-dashboard        # App + scheduler logs
-docker logs actual-dashboard -f     # Follow/tail
-docker logs actual-dashboard --since 1h  # Last hour only
+docker logs actual-insights        # App + scheduler logs
+docker logs actual-insights -f     # Follow/tail
+docker logs actual-insights --since 1h  # Last hour only
 ```
 
 ## Architecture
@@ -86,9 +86,9 @@ ANTHROPIC_API_KEY         # Optional — enables AI insights
 SPOTLIGHT_CATEGORIES      # Exactly 3 comma-separated category names; invalid/unset hides the spotlight column
 
 # PDF rendering (Phase 2)
-BROWSERLESS_URL           # Internal URL of browserless container (default: http://actual-dashboard-browserless:3000)
+BROWSERLESS_URL           # Internal URL of browserless container (default: http://actual-insights-browserless:3000)
 BROWSERLESS_TOKEN         # Shared secret token for browserless container
-PDF_RENDER_BASE_URL       # URL browserless uses to fetch the app (default: http://actual-dashboard:3000)
+PDF_RENDER_BASE_URL       # URL browserless uses to fetch the app (default: http://actual-insights:3000)
 PDF_RENDER_AUTH_TOKEN     # Secret that lets the headless browser bypass site auth — required for PDF/email
 
 # Email (Phase 2)

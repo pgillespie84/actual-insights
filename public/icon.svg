@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <!--
-    Source for public/icon.png, which is what unraid/actual-dashboard.xml
+    Source for public/icon.png, which is what unraid/actual-insights.xml
     points at. Nothing rebuilds the PNG on its own. To regenerate on macOS:
 
       qlmanage -t -s 512 -o public public/icon.svg
