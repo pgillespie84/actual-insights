@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatAxisDollars, formatTickLabel } from "@/lib/format";
 
 interface TopVendorsData {
   payee: string;
@@ -46,7 +46,7 @@ export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
               stroke="var(--text-muted)"
               fontSize={10}
               tick={{ fill: "var(--text-muted)" }}
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={formatAxisDollars}
               axisLine={false}
               tickLine={false}
             />
@@ -57,6 +57,14 @@ export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
               fontSize={11}
               tick={{ fill: "var(--text-muted)" }}
               width={100}
+              // Every bar gets its name. Left to itself Recharts thins category
+              // ticks out when it thinks they collide, which is how bars went
+              // unlabelled next to a name long enough to wrap.
+              interval={0}
+              // Wrapped, not passed by reference: Recharts calls a tick
+              // formatter with (value, index), and the index would land in the
+              // character budget — every label truncated to its own position.
+              tickFormatter={(name: string) => formatTickLabel(name)}
               axisLine={false}
               tickLine={false}
             />
