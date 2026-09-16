@@ -116,6 +116,14 @@ test("formatAxisDollars leaves a value that rounds short of the boundary", () =>
   expect(formatAxisDollars(999)).toBe("$999");
 });
 
+// M is the last unit on purpose, so this one case is allowed to read as a
+// figure that outgrew its suffix. Asserted rather than left to the doc comment,
+// so that adding a B tier has to be a decision rather than an accident.
+test("formatAxisDollars lets the M tier overflow rather than promoting", () => {
+  expect(formatAxisDollars(999_949_999)).toBe("$999.9M");
+  expect(formatAxisDollars(999_950_000)).toBe("$1000M");
+});
+
 // A wrapped tick label runs into its neighbours' slots, and Recharts responds
 // by hiding them — one long name left four bars unlabelled.
 test("formatTickLabel leaves a short name alone", () => {
