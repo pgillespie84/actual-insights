@@ -104,6 +104,13 @@ test("formatAxisDollars promotes a value that rounds across a boundary", () => {
   expect(formatAxisDollars(999.5)).toBe("$1k");
 });
 
+// Both promotion paths build a fresh template string with the sign in it, which
+// is exactly the kind of thing a later refactor of these branches drops.
+test("formatAxisDollars keeps the sign on a promoted value", () => {
+  expect(formatAxisDollars(-999_999)).toBe("−$1M");
+  expect(formatAxisDollars(-999.5)).toBe("−$1k");
+});
+
 test("formatAxisDollars leaves a value that rounds short of the boundary", () => {
   expect(formatAxisDollars(999_499)).toBe("$999.5k");
   expect(formatAxisDollars(999)).toBe("$999");

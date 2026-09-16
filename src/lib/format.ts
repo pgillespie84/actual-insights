@@ -46,6 +46,12 @@ export function formatSignedDollars(cents: number): string {
  * could not be read at all. Values under $1,000 stay in whole dollars for the
  * same reason — `$0k` is not a number anyone can use. A trailing `.0` is
  * dropped so a round thousand reads `$2k` rather than `$2.0k`.
+ *
+ * `M` is the last unit, so past `$999.9M` the number keeps growing rather than
+ * promoting: `$1000M`, not `$1B`. That is the one place the suffix and the
+ * figure are allowed to disagree, and it is deliberate — a household spending
+ * axis does not reach a billion dollars, and a `B` tier would be a branch
+ * nothing ever takes.
  */
 export function formatAxisDollars(dollars: number): string {
   const sign = dollars < 0 ? "−" : "";
