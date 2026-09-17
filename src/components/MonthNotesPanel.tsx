@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MAX_NOTE_LENGTH, monthsCovered } from "@/lib/monthNoteShape.cjs";
+import { MAX_NOTE_LENGTH, monthsCovered, nextMonthKey } from "@/lib/monthNoteShape.cjs";
+
+interface NotesPayload {
+  notes: MonthNote[];
+  insights: Record<string, string>;
+}
 
 interface MonthNote {
   id: string;
@@ -15,57 +20,89 @@ interface MonthNote {
  * The months whose insight has not seen this note yet.
  *
  * A note reaches an insight only when that month is regenerated, so a note
- * newer than a covered month's insight is written down but not yet acted on.
+ * newer than an influenced month's insight is written down but not yet acted
+ * on.
  *
- * Every covered month is checked, not just the start month. A note spanning
- * August to September feeds both months' insights, so a fresh August insight
- * says nothing about September — checking only the start month would report
- * the note as seen while September never received it, which is precisely the
- * "I added a note and nothing happened" mystery this is here to prevent.
+ * Every influenced month is checked, not just the start month — see
+ * `influencedMonths`. Checking one month would report the note as seen on the
+ * strength of an insight that happened to be fresh, while the insight someone
+ * actually reads never received it, which is precisely the "I added a note and
+ * nothing happened" mystery this is here to prevent.
  */
 export function staleMonths(
   note: MonthNote,
   insights: Record<string, string>,
   currentMonth: string,
 ): string[] {
-  return coveredSoFar(note, currentMonth).filter((month) => {
+  return influencedMonths(note, currentMonth).filter((month) => {
     const insight = insights[month];
     return !insight || insight < note.createdAt;
   });
 }
 
 /**
- * The months a note covers that can actually hold an insight yet.
+ * How many months after its own an in-progress insight carries.
  *
- * A note can legitimately run into a future month — a remodel booked through
- * October, written in September — and Actual Budget hands us budget months
- * ahead of today, so those months appear in the dropdown. But
- * `generate-insight.cjs` writes nothing for a month with no spending and
- * `--backfill` skips future months outright, so a future month can never stop
- * being stale. Flagging it would leave a warning and a button that do nothing
- * however many times they are pressed, which is the loop this feature exists
- * to remove. The note still reaches that month's insight once the month
- * arrives, because the fetch matches on the range.
+ * `buildInsight` gathers prev1..prev3 alongside the current month, and
+ * `gatherMonthData` puts each month's notes into its own payload. So an August
+ * note is physically present in the September, October and November
+ * in-progress insights, not only August's — and those are the insights someone
+ * actually reads. Anything asking which insights a note touches has to include
+ * them.
  */
-function coveredSoFar(note: MonthNote, currentMonth: string): string[] {
-  return (monthsCovered(note) as string[]).filter((month) => month <= currentMonth);
+const COMPARISON_MONTHS = 3;
+
+/**
+ * Every month whose insight a note can reach, up to the current month.
+ *
+ * Two things are going on. The note's own months come from its range. The
+ * three months after its last one come from the comparison window above.
+ *
+ * The clamp matters because a note can legitimately run into a future month —
+ * a remodel booked through October, written in September — and Actual Budget
+ * hands us budget months ahead of today, so those months appear in the
+ * dropdown. But `generate-insight.cjs` writes nothing for a month with no
+ * spending and `--backfill` skips future months outright, so a future month
+ * can never stop being stale. Flagging it would leave a warning and a button
+ * that do nothing however many times they are pressed, which is the loop this
+ * feature exists to remove. The note still reaches that month once it arrives,
+ * because the fetch matches on the range.
+ */
+function influencedMonths(note: MonthNote, currentMonth: string): string[] {
+  const covered = monthsCovered(note) as string[];
+  if (covered.length === 0) return [];
+
+  const months = [...covered];
+  let month = months[months.length - 1];
+  for (let i = 0; i < COMPARISON_MONTHS; i++) {
+    month = nextMonthKey(month) as string;
+    months.push(month);
+  }
+  return months.filter((m) => m <= currentMonth);
 }
 
 /**
- * The months whose stored insight actually quotes this note.
+ * The months whose stored insight was generated after this note, and so may
+ * quote it.
  *
- * Used when a note is deleted: those insights now describe something that is
- * no longer written down anywhere. A note deleted while still stale was never
- * in any insight, so there is nothing to redo — and each of these buttons is a
+ * Used when a note is deleted: those insights describe something that is no
+ * longer written down anywhere. A note deleted while still stale was never in
+ * any insight, so there is nothing to redo — and each of these buttons is a
  * paid Claude call, so offering one that would rewrite an insight identically
  * is worse than offering nothing.
+ *
+ * "May" rather than "does": a completed-month recap is regenerated without
+ * comparison months, so a later insight that once carried the note may have
+ * dropped it already. Erring towards offering the regenerate is the right way
+ * round — the alternative is an insight quoting a note that no longer exists,
+ * with nothing on screen saying so.
  */
 export function monthsQuoting(
   note: MonthNote,
   insights: Record<string, string>,
   currentMonth: string,
 ): string[] {
-  return coveredSoFar(note, currentMonth).filter((month) => {
+  return influencedMonths(note, currentMonth).filter((month) => {
     const insight = insights[month];
     return Boolean(insight) && insight >= note.createdAt;
   });
@@ -99,15 +136,21 @@ export function MonthNotesPanel({
   const [orphaned, setOrphaned] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  /**
+   * Reloads the notes and the insight timestamps, and hands the caller what it
+   * read. `regenerate` needs the value rather than the state, so it can tell
+   * whether an insight was actually written.
+   */
+  const load = useCallback(async (): Promise<NotesPayload | null> => {
     const res = await fetch("/api/admin/notes");
     if (!res.ok) {
       setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
-      return;
+      return null;
     }
-    const data = (await res.json()) as { notes: MonthNote[]; insights: Record<string, string> };
+    const data = (await res.json()) as NotesPayload;
     setNotes(data.notes);
     setInsights(data.insights);
+    return data;
   }, []);
 
   useEffect(() => {
@@ -190,17 +233,38 @@ export function MonthNotesPanel({
       }
 
       setStatus(`Regenerating ${month}…`);
+      const before = insights[month];
       const result = await waitForInsightsJob();
+
       // A failure belongs in the red box with the other errors, not in the
       // muted status line where it reads like progress.
-      if (result.ok) {
-        setStatus(result.message);
-        setOrphaned((months) => months.filter((m) => m !== month));
-      } else {
+      if (!result.ok) {
         setStatus(null);
         setError(result.message);
+        await load();
+        return;
       }
-      await load();
+
+      const after = await load();
+      if (!result.finished) {
+        setStatus(result.message);
+        return;
+      }
+
+      // The job exits zero whether or not it wrote anything: a month with no
+      // spending is skipped and still counts as success, and the script's last
+      // line is always "Done." so the runner's summary cannot tell us either.
+      // Whether the insight moved is the only honest signal, and saying
+      // "regenerated" without it is the never-clearing loop one layer up.
+      if (after && after.insights[month] === before) {
+        setStatus(
+          `Nothing was written for ${month} — there is no spending recorded for it yet.`,
+        );
+        return;
+      }
+
+      setStatus(result.message);
+      setOrphaned((months) => months.filter((m) => m !== month));
     } finally {
       setBusy(false);
     }
@@ -214,13 +278,14 @@ export function MonthNotesPanel({
    * success would tell the user an insight was written when it was not.
    */
   async function waitForInsightsJob(): Promise<
-    { ok: true; message: string } | { ok: false; message: string }
+    | { ok: true; finished: boolean; message: string }
+    | { ok: false; finished: boolean; message: string }
   > {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const res = await fetch("/api/admin/jobs");
       if (res.status === 401) {
-        return { ok: false, message: "Session expired — sign in again." };
+        return { ok: false, finished: false, message: "Session expired — sign in again." };
       }
       if (!res.ok) continue;
       const { jobs } = (await res.json()) as {
@@ -228,13 +293,17 @@ export function MonthNotesPanel({
       };
       const job = jobs.insights;
       if (job?.state === "failed") {
-        return { ok: false, message: `Regeneration failed: ${job.message ?? "no message"}` };
+        return { ok: false, finished: true, message: `Regeneration failed: ${job.message ?? "no message"}` };
       }
       if (job?.state === "success") {
-        return { ok: true, message: "Insight regenerated." };
+        // Success only means the script exited zero. Whether an insight was
+        // actually written is checked by the caller.
+        return { ok: true, finished: true, message: "Insight regenerated." };
       }
     }
-    return { ok: false, message: "Still running — reload the page to see where it got to." };
+    // Ran out of patience, not evidence of failure. The job may well be fine,
+    // so this belongs in the status line rather than the red box.
+    return { ok: true, finished: false, message: "Still running — reload the page to see where it got to." };
   }
 
   const button =

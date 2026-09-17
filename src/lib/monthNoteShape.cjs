@@ -110,6 +110,25 @@ function normalizeNote({ monthStart, monthEnd, note }) {
 }
 
 /**
+ * Removes the delimiter from a note's text, repeatedly, until it stays removed.
+ *
+ * One pass is not enough, and the reason is worth spelling out: removing a tag
+ * joins the text either side of it, and that join can spell the tag again.
+ * `</household</household_note>_note>` contains one literal closing tag; strip
+ * it and the halves meet as `</household_note>` — a live delimiter in the
+ * output, which is exactly the escape the tag exists to prevent. Each pass
+ * strictly shortens the string, so this terminates.
+ */
+function stripNoteTags(text) {
+  let out = text;
+  for (;;) {
+    const next = out.split(NOTE_TAG_OPEN).join("").split(NOTE_TAG_CLOSE).join("");
+    if (next === out) return out;
+    out = next;
+  }
+}
+
+/**
  * How a note is written into the AI payload.
  *
  * A multi-month note says so, because the model is looking at four months at
@@ -121,20 +140,18 @@ function formatNoteForPrompt(note) {
     note.monthEnd && note.monthEnd !== note.monthStart
       ? ` (spans ${note.monthStart} to ${note.monthEnd})`
       : "";
-  // The tag is only a boundary if the text cannot close it. A note containing
-  // the literal closing tag would otherwise end the delimiter early and the
-  // rest would read as prompt text rather than as the household's words.
-  const text = note.note.split(NOTE_TAG_OPEN).join("").split(NOTE_TAG_CLOSE).join("");
   // Wrapped in a tag the prompt names, so the boundary between the household's
   // words and the instructions is structural rather than a matter of the model
-  // taking the prompt's word for it. Nothing sanitises the text — the only
-  // author and the only reader are the same household — but a note that reads
-  // like an instruction should still be visibly data.
-  return `${NOTE_TAG_OPEN}${text}${span}${NOTE_TAG_CLOSE}`;
+  // taking the prompt's word for it. The text is stripped of the delimiter
+  // itself and nothing more — the only author and the only reader are the same
+  // household, so the point is not to defend against them, it is that a note
+  // reading like an instruction should still arrive visibly marked as data.
+  return `${NOTE_TAG_OPEN}${stripNoteTags(note.note)}${span}${NOTE_TAG_CLOSE}`;
 }
 
 module.exports = {
   NOTE_TAG_OPEN,
+  stripNoteTags,
   NOTE_TAG_CLOSE,
   MAX_NOTE_LENGTH,
   MAX_NOTES_PER_MONTH,
