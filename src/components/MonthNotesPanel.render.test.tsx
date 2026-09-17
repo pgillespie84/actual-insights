@@ -30,24 +30,29 @@ function jsonResponse(body: unknown, status = 200) {
  *
  * React reports its own problems through the same channel, though, and this
  * file is built out of act() and fake timers — exactly where an "update was not
- * wrapped in act" warning is worth seeing. So React's warnings are re-raised as
- * failures rather than swallowed with the rest.
+ * wrapped in act" warning is worth seeing. Those are collected and asserted on
+ * after each test rather than thrown from inside the mock: React raises them
+ * from inside a setState, which here always sits in a try whose catch logs
+ * again, so throwing would re-enter this mock and escape as an unattributed
+ * unhandled rejection instead of a failure pointing at the test.
  */
 let logged: ReturnType<typeof vi.spyOn>;
+let reactWarnings: string[];
 
 beforeEach(() => {
+  reactWarnings = [];
   logged = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const first = String(args[0] ?? "");
-    if (first.includes("not wrapped in act") || first.includes("Warning:")) {
-      throw new Error(first);
-    }
+    if (first.includes("not wrapped in act")) reactWarnings.push(first);
   });
 });
 
 afterEach(() => {
+  const warnings = reactWarnings;
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
+  expect(warnings).toEqual([]);
 });
 
 async function renderPanel() {
@@ -199,9 +204,12 @@ test("a blip mid-poll costs one attempt, not the whole wait", async () => {
     await vi.advanceTimersByTimeAsync(2000);
   });
   // The blip alone must not end the wait or report anything yet — but it is
-  // the one failure path that reports itself, so it has to leave a trace.
+  // the one failure path that reports itself, so it has to leave a trace, and
+  // the assertion has to say which trace or it passes on any log at all.
   expect(screen.queryByText(/Regeneration failed/)).toBeNull();
-  expect(logged).toHaveBeenCalled();
+  expect(logged).toHaveBeenCalledWith(
+    expect.objectContaining({ message: "Could not reach the server." }),
+  );
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(2000);
@@ -240,7 +248,7 @@ test("a wait where nothing ever answered does not claim the job is still running
   ).toBeTruthy();
 });
 
-test("a reply that parses but carries no jobs costs an attempt, not the wait", async () => {
+test("a reply that parses but is not from the jobs endpoint costs an attempt, and says so", async () => {
   vi.useFakeTimers();
 
   let jobLooks = 0;
@@ -264,27 +272,28 @@ test("a reply that parses but carries no jobs costs an attempt, not the wait", a
   });
 
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(2000);
   });
+  // Nothing threw, so without an explicit log this would be a silent wait with
+  // an empty console — the gap the poll's catch was given a log to close.
+  expect(logged).toHaveBeenCalledWith("The jobs endpoint answered without a jobs object.");
 
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
   // Reaching this at all means the malformed reply did not end the wait.
   expect(screen.getByText("Regeneration failed: no API key")).toBeTruthy();
 });
 
-test("a parsed reply that is not from the jobs endpoint leaves a trace", async () => {
+test("two minutes of replies from something that is not the jobs endpoint says that", async () => {
   vi.useFakeTimers();
 
-  let jobLooks = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
       if (init?.method === "POST") return jsonResponse({ started: "insights" });
-      jobLooks += 1;
-      if (jobLooks === 1) return jsonResponse({ error: "bad gateway" });
-      return jsonResponse({
-        jobs: { insights: { state: "failed", message: "no API key" } },
-      });
+      return jsonResponse({ error: "bad gateway" });
     }),
   );
 
@@ -294,10 +303,15 @@ test("a parsed reply that is not from the jobs endpoint leaves a trace", async (
   });
 
   await act(async () => {
-    await vi.advanceTimersByTimeAsync(2000);
+    await vi.advanceTimersByTimeAsync(2000 * 61);
   });
 
-  // Nothing threw, so without an explicit log this would be a silent wait with
-  // an empty console — the gap the poll's catch was given a log to close.
-  expect(logged).toHaveBeenCalledWith("The jobs endpoint answered without a jobs object.");
+  // Something replied sixty times, so "nothing answered" would be wrong — but
+  // nothing ever looked at the job, so "still running" would be a claim about
+  // something unobserved.
+  expect(
+    screen.getByText(
+      "Something answered while waiting, but not the jobs endpoint — check what is in front of the app.",
+    ),
+  ).toBeTruthy();
 });

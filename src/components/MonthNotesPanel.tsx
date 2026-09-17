@@ -64,7 +64,12 @@ export function describeFetchFailure(err: unknown): string {
  * is not proof it came from this endpoint.
  */
 interface JobsReply {
-  jobs?: Record<string, { state: string; message: string | null }>;
+  // Partial, not because a key is optional in the real reply, but because
+  // `noUncheckedIndexedAccess` is off: a plain Record types every index read as
+  // present, so `jobs.insights?.state` would compile identically to
+  // `jobs.insights.state` and the guard would again be held by convention
+  // rather than by the compiler.
+  jobs?: Partial<Record<string, { state: string; message: string | null }>>;
 }
 
 /**
@@ -429,6 +434,12 @@ export function MonthNotesPanel({
     // is exactly when a job is likely to have been in flight.
     let everAnswered = false;
 
+    // Narrower: something answered *and* it was this endpoint. A proxy serving
+    // its own envelope for two minutes satisfies the first and not the second,
+    // and telling the reader the job is still running would be a claim about
+    // something nothing ever looked at.
+    let reachedJobsEndpoint = false;
+
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
 
@@ -468,6 +479,7 @@ export function MonthNotesPanel({
         console.error("The jobs endpoint answered without a jobs object.");
         continue;
       }
+      reachedJobsEndpoint = true;
 
       const job = jobs.insights;
       if (job?.state === "failed") {
@@ -483,9 +495,11 @@ export function MonthNotesPanel({
     // so this belongs in the status line rather than the red box.
     return {
       state: "timeout",
-      message: everAnswered
+      message: reachedJobsEndpoint
         ? "Still running — reload the page to see where it got to."
-        : "Nothing answered while waiting — reload the page to see where it got to.",
+        : everAnswered
+          ? "Something answered while waiting, but not the jobs endpoint — check what is in front of the app."
+          : "Nothing answered while waiting — reload the page to see where it got to.",
     };
   }
 
