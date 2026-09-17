@@ -5,6 +5,7 @@ export interface DashboardConfig {
   HOUSEHOLD_NAMES: string;
   SKIP_CATEGORIES: string[];
   SKIP_INCOME: string[];
+  TOP_CATEGORY_EXCLUSIONS: string[];
   BUDGET_BUCKETS: Record<string, string[]>;
   BUSINESS_CATEGORIES: string[];
   EXCLUDED_ACCOUNTS: string[];
@@ -33,6 +34,24 @@ export const CONFIG = config;
 export const SKIP_CATEGORIES: string[] = config.SKIP_CATEGORIES;
 
 export const SKIP_INCOME: string[] = config.SKIP_INCOME;
+
+/**
+ * Categories kept out of the "top spending" rankings on the dashboard.
+ *
+ * Deliberately separate from SKIP_CATEGORIES. That list removes a category
+ * from every figure in the app; this one removes it only from the two widgets
+ * that rank categories and payees by size. The mortgage belongs here and not
+ * there: it is real money that has to stay in the totals, but it wins the
+ * ranking every month by construction, so a slot spent on it is a slot not
+ * spent on something that might change a decision.
+ *
+ * The AI payload is not filtered by this. The model needs the complete picture
+ * for its totals to reconcile; the exclusions are about where your attention
+ * goes, not about what is true.
+ *
+ * Optional, so a config written before this setting existed still loads.
+ */
+export const TOP_CATEGORY_EXCLUSIONS: string[] = config.TOP_CATEGORY_EXCLUSIONS ?? [];
 
 export const BUDGET_BUCKETS: Record<string, string[]> = config.BUDGET_BUCKETS;
 

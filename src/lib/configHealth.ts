@@ -59,6 +59,7 @@ export interface HealthCheckConfig {
   BUDGET_BUCKETS?: Record<string, string[]>;
   SKIP_CATEGORIES?: string[];
   SKIP_INCOME?: string[];
+  TOP_CATEGORY_EXCLUSIONS?: string[];
   BUSINESS_CATEGORIES?: string[];
   EXCLUDED_ACCOUNTS?: string[];
 }
@@ -117,6 +118,7 @@ export function checkConfigHealth(
 
   report("SKIP_CATEGORIES", config.SKIP_CATEGORIES ?? [], "unknown-category");
   report("SKIP_INCOME", config.SKIP_INCOME ?? [], "unknown-category");
+  report("TOP_CATEGORY_EXCLUSIONS", config.TOP_CATEGORY_EXCLUSIONS ?? [], "unknown-category");
   report("BUSINESS_CATEGORIES", config.BUSINESS_CATEGORIES ?? [], "unknown-category");
   report("EXCLUDED_ACCOUNTS", config.EXCLUDED_ACCOUNTS ?? [], "unknown-account");
 

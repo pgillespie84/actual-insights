@@ -65,6 +65,11 @@ Edit `config/dashboard.json` to match your Actual Budget setup. It is gitignored
 
 In production, mount it on a volume and point `DASHBOARD_CONFIG` at it (`/data/config.json` in the compose file) so it survives image updates.
 
+Two of the category lists are easy to confuse, so it is worth being explicit about the difference:
+
+- `SKIP_CATEGORIES` removes a category from every figure the dashboard produces. Use it for bookkeeping artefacts that are not real spending, such as rollover and pending-transaction categories.
+- `TOP_CATEGORY_EXCLUSIONS` removes a category from the "Top categories" and "Top payees" rankings only. It is for real spending that wins those rankings every month and tells you nothing by doing so — a mortgage is the obvious case. The money stays in every total, every trend, and everything the AI insight is given.
+
 ### Required environment variables
 
 | Variable | Description |

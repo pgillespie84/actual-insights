@@ -55,7 +55,8 @@ docker logs actual-dashboard --since 1h  # Last hour only
 - **`scripts/generate-insight.cjs`** — Gathers month budget/spending data via SQL, sends to Claude API (`claude-sonnet-4-6`), stores result in `DailyInsight` table. Generates for current month (in-progress prompt) and previous month (completed prompt). 24-hour cache per month.
 - **`src/lib/queries.ts`** — All Prisma queries for dashboard data. Queries budgets and transactions separately then combines in JS (avoids JOIN inflation).
 - **`src/lib/loadConfig.cjs`** — Single config loader shared by the Next server code and the CJS scripts. Resolves `$DASHBOARD_CONFIG`, then `config/dashboard.json`, then `config/dashboard.example.json`.
-- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation.
+- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `TOP_CATEGORY_EXCLUSIONS`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation. `TOP_CATEGORY_EXCLUSIONS` is the exception: it applies only to the top-category and top-payee rankings, never to totals and never to the AI payload.
+- **`src/lib/monthNotes.cjs`** — Month notes, the free text the household writes about a month on the admin page. Handed to the AI as context in `gatherMonthData`; changes no figure and suppresses no flag.
 - **`src/app/(dashboard)/`** — Protected dashboard pages (route group with auth layout).
 - **`src/app/api/`** — API routes for auth, dashboard, analytics, trends.
 

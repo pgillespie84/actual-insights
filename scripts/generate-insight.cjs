@@ -22,6 +22,12 @@ IMPORTANT — this is an IN-PROGRESS month. The data includes monthProgress (day
 - Use previousMonthSpentSameDay and previousMonthSpentSameDayChange for a fair same-period comparison.
 - Never say the month is "on track" or "over budget" based on totalSpent alone — always account for how far through the month we are.
 - atRiskCategories are categories ahead of their spending pace but not yet over budget — flag these as "ones to watch", not confirmed problems.
+
+MONTH NOTES — monthNotes is what the household themselves wrote about that month, in their own words. Every month in the payload carries its own.
+- Treat a note as their description of what happened, not as verified data. Say "you noted..." or "you mentioned..." rather than stating it as fact.
+- Use notes to explain figures. A category that jumped for a reason they logged should be reported with that reason attached.
+- Notes never excuse anything. A category over budget is still over budget and still gets named with its dollar amount — the note is the explanation, not a pardon.
+- The comparison months have notes too. Use them so a return to normal after a noted one-off is described as exactly that, and not celebrated as an improvement.
 - overspendingCategories have already exceeded their budget — treat these as confirmed issues.
 
 Provide 5-7 concise bullet points covering:
@@ -45,6 +51,12 @@ This is a COMPLETED month — all transactions are finalized. Provide a 3-5 bull
 Be casual and encouraging — like a helpful friend wrapping up the month. Use plain language.
 Mention specific categories and dollar amounts. Celebrate wins, note areas to watch next month.
 The data includes savingsFlows showing actual money moved in/out of savings accounts — use this for savings commentary rather than the calculated savingsRate.
+
+MONTH NOTES — monthNotes is what the household themselves wrote about that month, in their own words. Every month in the payload carries its own.
+- Treat a note as their description of what happened, not as verified data. Say "you noted..." or "you mentioned..." rather than stating it as fact.
+- Use notes to explain figures. A category that jumped for a reason they logged should be reported with that reason attached.
+- Notes never excuse anything. A category over budget is still over budget and still gets named with its dollar amount — the note is the explanation, not a pardon.
+- The comparison months have notes too. Use them so a return to normal after a noted one-off is described as exactly that, and not celebrated as an improvement.
 
 Begin the response with exactly two labelled lines, then the bullets:
 HEADLINE: two sentences a person would want to read first. Name the figures — dollar amounts and percentages — and lead with the single most notable thing about the month. Do not hedge and do not list.

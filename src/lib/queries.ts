@@ -5,9 +5,12 @@ import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
 import { startOfMonth, endOfMonth, format, subMonths } from "date-fns";
 import { getCurrentMonthKeyET, getCurrentDayET } from "./timezone";
-import { generateMonthRange, expenseCategoryFilter, mapWithConcurrency, MONTH_QUERY_CONCURRENCY, type MonthEntry } from "./query-utils";
+import { generateMonthRange, expenseCategoryFilter, rankingCategoryFilter, mapWithConcurrency, MONTH_QUERY_CONCURRENCY, type MonthEntry } from "./query-utils";
 
 const catFilter = expenseCategoryFilter();
+
+/** Same as catFilter, minus the categories excluded from the size rankings. */
+const rankFilter = rankingCategoryFilter();
 
 /** One month loop, with a bounded number of months in flight. */
 function mapMonths<T>(
@@ -270,7 +273,7 @@ export async function getTopPayees(monthDate: Date, limit: number = 15) {
     by: ["payee"],
     where: {
       date: { gte: start, lte: end },
-      category: catFilter,
+      category: rankFilter,
       payee: { not: null },
     },
     _sum: { amount: true },
@@ -513,7 +516,7 @@ export async function getTopExpenseCategories(monthDate: Date, limit: number = 5
     by: ["categoryId"],
     where: {
       date: { gte: start, lte: end },
-      category: catFilter,
+      category: rankFilter,
       categoryId: { not: null },
     },
     _sum: { amount: true },
