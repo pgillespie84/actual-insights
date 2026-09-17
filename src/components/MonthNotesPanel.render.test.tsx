@@ -189,6 +189,10 @@ test("a blip mid-poll costs one attempt, not the whole wait", async () => {
 test("a wait where nothing ever answered does not claim the job is still running", async () => {
   vi.useFakeTimers();
 
+  // The notes endpoint is kept healthy deliberately, so the assertion is about
+  // the poll's own flag. A real container restart takes both down, and the
+  // reload's "could not reach" error would appear alongside this status line.
+
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -212,3 +216,4 @@ test("a wait where nothing ever answered does not claim the job is still running
     screen.getByText("Nothing answered while waiting — reload the page to see where it got to."),
   ).toBeTruthy();
 });
+

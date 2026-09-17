@@ -1,5 +1,5 @@
-import { test, expect } from "vitest";
-import { staleMonths, monthsQuoting } from "./MonthNotesPanel";
+import { test, expect, vi } from "vitest";
+import { staleMonths, monthsQuoting, describeFetchFailure } from "./MonthNotesPanel";
 
 const NOW = "2026-09-16T12:00:00.000Z";
 const BEFORE = "2026-09-16T08:00:00.000Z";
@@ -135,4 +135,26 @@ test("deleting a note offers months whose insight may still quote it, wider than
     "2026-11",
   ]);
   expect(staleMonths(august, insights, "2026-11")).toEqual([]);
+});
+
+test("a throw that says nothing about the network is not described as if it did", () => {
+  // The branch that matters. A failed fetch rejects with a TypeError, but so
+  // does the likeliest bug in the logic these try blocks also wrap — reading a
+  // property of undefined. Classifying by error class would call that bug a
+  // network failure and send the reader to check whether the container is up,
+  // which is why unreachability is decided at the fetch instead.
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    expect(describeFetchFailure(new TypeError("Cannot read properties of undefined"))).toBe(
+      "Something went wrong — there may be more in the browser console.",
+    );
+    expect(describeFetchFailure("a bare string")).toBe(
+      "Something went wrong — there may be more in the browser console.",
+    );
+    // Caught errors are not reported by the browser, so pointing at the
+    // console only helps if something put them there.
+    expect(logged).toHaveBeenCalledTimes(2);
+  } finally {
+    logged.mockRestore();
+  }
 });

@@ -11,7 +11,29 @@ import { MAX_NOTE_LENGTH, monthsCovered, nextMonthKey } from "@/lib/monthNoteSha
  * unreachable would be wrong. The rest of this panel is careful to claim only
  * what it can evidence; this keeps that true of its error messages too.
  */
+/** The request never got an answer. */
+class Unreachable extends Error {}
+
+/** An answer arrived and could not be parsed. */
 class UnreadableReply extends Error {}
+
+/**
+ * fetch, with a failure to reach the server marked as such at the point it
+ * happens.
+ *
+ * Classifying here rather than by error type afterwards is the whole point. A
+ * failed fetch rejects with a TypeError — but so does the most common bug in
+ * the logic these try blocks also wrap: reading a property of undefined.
+ * Deciding from the error class would call that bug a network failure and send
+ * the reader off to check whether the container is up.
+ */
+async function request(url: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, init);
+  } catch (err) {
+    throw new Unreachable("Could not reach the server.", { cause: err });
+  }
+}
 
 async function readJson<T>(res: Response): Promise<T> {
   try {
@@ -27,15 +49,13 @@ async function readJson<T>(res: Response): Promise<T> {
 /**
  * What to tell the reader about a throw, claiming only what the error supports.
  *
- * A failed fetch rejects with a TypeError, so that is the one case where
- * "could not reach the server" is evidence rather than a guess. These try
- * blocks cover more than their fetch, and a bug in the surrounding logic
- * surfacing as a confident claim about the network would send the reader
- * looking in the wrong place entirely.
+ * Also logs. A caught error is not reported by the browser on its own, so
+ * without this the message pointing at the console would send them somewhere
+ * empty, and the cause kept above would go nowhere.
  */
-function describeFetchFailure(err: unknown): string {
-  if (err instanceof UnreadableReply) return "The server's reply could not be read.";
-  if (err instanceof TypeError) return "Could not reach the server.";
+export function describeFetchFailure(err: unknown): string {
+  console.error(err);
+  if (err instanceof Unreachable || err instanceof UnreadableReply) return err.message;
   return "Something went wrong — there may be more in the browser console.";
 }
 
@@ -235,7 +255,7 @@ export function MonthNotesPanel({
     // would escape through an onClick and take the caller's own error message
     // with it — leaving a panel that reports nothing at all.
     try {
-      const res = await fetch("/api/admin/notes");
+      const res = await request("/api/admin/notes");
       if (!res.ok) {
         setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
         return null;
@@ -258,7 +278,7 @@ export function MonthNotesPanel({
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/notes", {
+      const res = await request("/api/admin/notes", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ monthStart, monthEnd: monthEnd || undefined, note: text }),
@@ -286,7 +306,7 @@ export function MonthNotesPanel({
     setStatus(null);
     setBusy(true);
     try {
-      const res = await fetch(`/api/admin/notes?id=${encodeURIComponent(note.id)}`, {
+      const res = await request(`/api/admin/notes?id=${encodeURIComponent(note.id)}`, {
         method: "DELETE",
       });
       if (!res.ok) {
@@ -323,7 +343,7 @@ export function MonthNotesPanel({
     setError(null);
     setBusy(true);
     try {
-      const res = await fetch("/api/admin/jobs", {
+      const res = await request("/api/admin/jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ job: "insights", month }),
@@ -409,7 +429,11 @@ export function MonthNotesPanel({
       // iterations is already reported honestly as a timeout.
       let jobs: Record<string, { state: string; message: string | null }>;
       try {
-        const res = await fetch("/api/admin/jobs");
+        const res = await request("/api/admin/jobs");
+        // A resolved request is the evidence that something answered. Whether
+        // its body parses is a separate question, and a jobs endpoint
+        // returning 500 for two minutes is a server that replied sixty times.
+        everAnswered = true;
         if (res.status === 401) {
           return { state: "failed", message: "Session expired — sign in again." };
         }
@@ -417,7 +441,6 @@ export function MonthNotesPanel({
         ({ jobs } = await readJson<{
           jobs: Record<string, { state: string; message: string | null }>;
         }>(res));
-        everAnswered = true;
       } catch {
         continue;
       }
