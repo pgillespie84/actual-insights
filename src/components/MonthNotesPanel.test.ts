@@ -227,8 +227,9 @@ test("the type refuses to remember a non-answer as the answer", () => {
   //
   // That alone would let the signature widen without failing anything, since
   // these say nothing about it, so the line below ties the two together: if
-  // the parameter widens, this stops compiling. One-directional on purpose —
-  // narrowing it is already caught by the recursive call in waitingMessage.
+  // the parameter widens, this stops compiling. One-directional on purpose:
+  // narrowing it is already caught where waitForInsightsJob passes its own
+  // lastAnswer in, that local being declared with the narrow type.
   type ParamStaysNarrow = Parameters<typeof waitingMessage>[2] extends
     | AnsweredObservation
     | null

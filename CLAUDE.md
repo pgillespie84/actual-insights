@@ -17,7 +17,9 @@ npm run dev          # Next.js dev server (localhost:3000)
 npm run build        # Production build
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit. Some guarantees in the code are compile-time only
-                     # (see MonthNotesPanel) — vitest strips types, so it cannot catch them
+                     # (see MonthNotesPanel) — vitest strips types, so it cannot catch them.
+                     # `npm run build` type-checks too, so the PR build already enforces
+                     # these; this is the fast way to run them without a full build.
 npx prisma generate  # Regenerate Prisma client after schema changes
 npx prisma migrate dev --name <name>  # Create new migration
 npx prisma migrate deploy             # Apply migrations
