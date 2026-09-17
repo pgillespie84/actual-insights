@@ -4,6 +4,7 @@ import {
   monthsQuoting,
   describeFetchFailure,
   waitingMessage,
+  type AnsweredObservation,
 } from "./MonthNotesPanel";
 
 const NOW = "2026-09-16T12:00:00.000Z";
@@ -212,19 +213,28 @@ test("an observation from outside the type system fails loudly instead of render
 });
 
 test("the type refuses to remember a non-answer as the answer", () => {
-  // Not a runtime assertion — the point is that these lines do not compile.
-  // tsconfig includes this file, so `tsc --noEmit` enforces it, and if
-  // AnsweredObservation ever widens to admit them the unused @ts-expect-error
-  // becomes the failure.
+  // Not runtime assertions — the point is that these lines do not compile.
+  // tsconfig includes this file, so `tsc --noEmit` enforces it, and widening
+  // AnsweredObservation leaves the directives unused, which fails the build.
+  //
+  // Asserted against the type rather than through a waitingMessage call, so
+  // the assignment under test is the only thing that can error. Through a call
+  // site, a change to the function's arity or its other parameters would put
+  // an error on these lines for an unrelated reason and keep the directives
+  // "used" while the guarantee went unchecked.
 
   // @ts-expect-error a dropped connection is not an answer
-  waitingMessage(false, { kind: "unreachable" }, { kind: "unreachable" });
+  const dropped: AnsweredObservation = { kind: "unreachable" };
 
   // @ts-expect-error a throw from elsewhere establishes nothing about the server
-  waitingMessage(false, { kind: "unreachable" }, { kind: "unexpected" });
+  const unexpected: AnsweredObservation = { kind: "unexpected" };
 
   // @ts-expect-error reaching the job is carried by reachedJobsEndpoint, not remembered here
-  waitingMessage(false, { kind: "unreachable" }, { kind: "reached" });
+  const reached: AnsweredObservation = { kind: "reached" };
+
+  void dropped;
+  void unexpected;
+  void reached;
 
   expect(waitingMessage(false, { kind: "unreachable" }, { kind: "no-jobs" })).toContain(
     "Before that:",

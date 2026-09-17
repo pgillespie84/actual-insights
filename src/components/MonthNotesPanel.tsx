@@ -93,10 +93,18 @@ type PollObservation =
  * answer. Before that: Still running", which claims the job may be running
  * while nothing established it.
  */
-type AnsweredObservation = Extract<
-  PollObservation,
-  { kind: "http" | "no-jobs" | "unreadable" }
->;
+type AnsweredKind = "http" | "no-jobs" | "unreadable";
+
+/**
+ * Compile-time check that every kind named above is a real one. `Extract`
+ * matches nothing rather than erroring on a literal that does not exist, so a
+ * typo would otherwise shrink the type in silence.
+ */
+type AnsweredKindsExist = AnsweredKind extends PollObservation["kind"] ? true : never;
+const _answeredKindsExist: AnsweredKindsExist = true;
+void _answeredKindsExist;
+
+export type AnsweredObservation = Extract<PollObservation, { kind: AnsweredKind }>;
 
 /** Statuses a reverse proxy returns for a backend it could not use. */
 const GATEWAY_STATUSES = [502, 503, 504];
@@ -542,10 +550,14 @@ export function MonthNotesPanel({
     let last: PollObservation | null = null;
     let reachedJobsEndpoint = false;
 
-    // The most recent observation where something actually replied. Only an
-    // observation of this kind entitles the ending to speak about the wait
-    // rather than about the attempt it finished on, and it keeps the earlier
-    // evidence around so a final dropped connection cannot erase it.
+    // The most recent observation where something replied *and* there is
+    // something to report about it. Only an observation of this kind entitles
+    // the ending to speak about the wait rather than about the attempt it
+    // finished on, and it keeps the earlier evidence around so a final dropped
+    // connection cannot erase it.
+    //
+    // Reaching the job is a reply and is still deliberately not recorded here;
+    // reachedJobsEndpoint carries that and wins first. See AnsweredObservation.
     //
     // Assigned inline below rather than through a helper: TypeScript does not
     // track writes made inside a nested function, so a helper would narrow
