@@ -1,5 +1,5 @@
 import { subMonths, startOfMonth, endOfMonth, format, parse } from "date-fns";
-import { SKIP_CATEGORIES, SKIP_INCOME, TOP_CATEGORY_EXCLUSIONS } from "./constants";
+import { SKIP_CATEGORIES, SKIP_INCOME } from "./constants";
 
 export interface MonthEntry {
   monthDate: Date;
@@ -89,7 +89,17 @@ export async function mapWithConcurrency<T, R>(
 /** Months queried at once inside a single fan-out loop. */
 export const MONTH_QUERY_CONCURRENCY = 4;
 
-export function expenseCategoryFilter(): {
+/**
+ * The where-clause every expense query shares.
+ *
+ * `extraSkips` is for a query that hides more than the household-wide skip
+ * lists do. The Top vendors widget is the case: a mortgage payment is a real
+ * expense and belongs in every total, but as a vendor it is one fixed payment
+ * several times the size of any shop, so it takes the top bar and flattens the
+ * ten below it into a row of stubs. Hiding it there is a presentation choice
+ * about one chart, which is why it is a parameter rather than a wider filter.
+ */
+export function expenseCategoryFilter(extraSkips: string[] = []): {
   isIncome: false;
   hidden: false;
   name: { notIn: string[] };
@@ -97,30 +107,6 @@ export function expenseCategoryFilter(): {
   return {
     isIncome: false,
     hidden: false,
-    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME] },
-  };
-}
-
-/**
- * expenseCategoryFilter plus the categories kept out of the "top spending"
- * rankings.
- *
- * Only the two widgets that rank by size use this. Everything else — totals,
- * trends, the AI payload — keeps using expenseCategoryFilter, so an excluded
- * category is still counted everywhere it contributes to a real figure.
- *
- * The exclusion has to be part of the query rather than a filter on the
- * results, because both callers apply a LIMIT in the database. Dropping the
- * mortgage afterwards would leave four bars in a widget built for five.
- */
-export function rankingCategoryFilter(): {
-  isIncome: false;
-  hidden: false;
-  name: { notIn: string[] };
-} {
-  const base = expenseCategoryFilter();
-  return {
-    ...base,
-    name: { notIn: [...base.name.notIn, ...TOP_CATEGORY_EXCLUSIONS] },
+    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME, ...extraSkips] },
   };
 }

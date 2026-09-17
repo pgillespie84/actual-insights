@@ -1,6 +1,6 @@
 import { test, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateMonthRange, expenseCategoryFilter, rankingCategoryFilter, resolveMonth, mapWithConcurrency } from "./query-utils";
-import { SKIP_CATEGORIES, SKIP_INCOME, TOP_CATEGORY_EXCLUSIONS } from "./constants";
+import { generateMonthRange, expenseCategoryFilter, resolveMonth, mapWithConcurrency } from "./query-utils";
+import { SKIP_CATEGORIES, SKIP_INCOME } from "./constants";
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
@@ -46,23 +46,28 @@ test("expenseCategoryFilter returns skip-list where clause", () => {
   });
 });
 
-// The one function that changes what two dashboard widgets display. The part
-// worth pinning is that it *extends* the skip lists rather than replacing
-// them: dropping them would put rollover and pending-transaction rows back
-// into the rankings.
-test("rankingCategoryFilter adds the top-category exclusions to the skip lists", () => {
-  expect(rankingCategoryFilter()).toEqual({
+// One chart hides more than the household lists do — Top vendors drops the
+// mortgage — so the extras append rather than replace. Losing the base lists
+// here would put "Pending Transactions" back on a chart nothing else shows it
+// on, which reads as data rather than as a filter that stopped working.
+test("expenseCategoryFilter appends extra skips to the household lists", () => {
+  expect(expenseCategoryFilter(["Mortgage"])).toEqual({
     isIncome: false,
     hidden: false,
-    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME, ...TOP_CATEGORY_EXCLUSIONS] },
+    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME, "Mortgage"] },
   });
 });
 
-// Totals, trends and the AI payload all run through expenseCategoryFilter, so
-// an exclusion leaking into it would quietly remove real money from every
-// figure in the app.
-test("the exclusions never leak into the filter the totals use", () => {
-  rankingCategoryFilter();
+test("no extra skips leaves the filter exactly as it was", () => {
+  expect(expenseCategoryFilter([])).toEqual(expenseCategoryFilter());
+});
+
+// Totals, trends and the AI payload all run through the bare filter, so an
+// extra leaking into it would quietly remove real money from every figure in
+// the app. The base lists are spread into a fresh array on each call, and this
+// is what says so.
+test("extra skips never leak into the filter the totals use", () => {
+  expenseCategoryFilter(["Mortgage"]);
   expect(expenseCategoryFilter().name.notIn).toEqual([...SKIP_CATEGORIES, ...SKIP_INCOME]);
 });
 

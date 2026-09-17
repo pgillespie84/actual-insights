@@ -189,3 +189,23 @@ test("every malformed setting is reported, one row each", () => {
   expect(problems).toHaveLength(4);
   expect(problems.every((p) => p.kind === "malformed-list")).toBe(true);
 });
+
+// The key is optional and most configs will not have it, but a typo in it is
+// the quietest failure on the admin page's list: Top vendors keeps showing the
+// mortgage, which is indistinguishable from never having set the key at all.
+test("a SKIP_VENDOR_CATEGORIES name matching no Category is reported", () => {
+  const problems = checkConfigHealth(
+    { NET_WORTH_GROUPS: requiredGroups, SKIP_VENDOR_CATEGORIES: ["Mortgage"] },
+    db,
+  );
+
+  expect(problems).toEqual([
+    { setting: "SKIP_VENDOR_CATEGORIES", value: "Mortgage", kind: "unknown-category" },
+  ]);
+});
+
+test("a config without SKIP_VENDOR_CATEGORIES reports nothing for it", () => {
+  const problems = checkConfigHealth({ NET_WORTH_GROUPS: requiredGroups }, db);
+
+  expect(problems.some((p) => p.setting === "SKIP_VENDOR_CATEGORIES")).toBe(false);
+});

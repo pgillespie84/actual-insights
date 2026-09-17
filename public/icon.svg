@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!--
+    Source for public/icon.png, which is what unraid/actual-insights.xml
+    points at. Nothing rebuilds the PNG on its own. To regenerate on macOS:
+
+      qlmanage -t -s 512 -o public public/icon.svg
+      mv public/icon.svg.png public/icon.png
+      then keep IHDR, sRGB, IDAT and the closing IEND, dropping the rest
+
+    The last step matters: qlmanage writes an eXIf chunk, so a PNG that
+    skips it is not the file that is committed here. IEND is mandatory and
+    stays; a PNG without its trailer will not render at all. Check the
+    result is 512x512: a HiDPI display hands back 1024, which needs a
+    re-run at -s 256 or scaling back down. Off a Mac, rsvg-convert
+    -w 512 -h 512 draws an equivalent icon in one command, though not the
+    identical bytes, since a different rasteriser antialiases differently.
+
+    The glyph is the Heroicons v2 solid "banknotes" path (MIT), the same one
+    inlined in src/components/Nav.tsx.
+
+    Colours are the dark theme tokens in src/app/globals.css: the card
+    background, the card border composited over it, and the accent. Token
+    names are spelled without their leading dashes on purpose, since a
+    double hyphen inside an XML comment makes this file unparseable.
+  -->
+  <rect width="512" height="512" rx="96" fill="#232220"/>
+  <rect x="24" y="24" width="464" height="464" rx="76" fill="none" stroke="#3e3d3a" stroke-width="4"/>
+  <g transform="translate(112 112) scale(12)">
+    <path fill="#8fbb9c" d="M2.273 5.625A4.483 4.483 0 0 1 5.25 4.5h13.5c1.141 0 2.183.425 2.977 1.125A3 3 0 0 0 18.75 3H5.25a3 3 0 0 0-2.977 2.625ZM2.273 8.625A4.483 4.483 0 0 1 5.25 7.5h13.5c1.141 0 2.183.425 2.977 1.125A3 3 0 0 0 18.75 6H5.25a3 3 0 0 0-2.977 2.625ZM5.25 9a3 3 0 0 0-3 3v6a3 3 0 0 0 3 3h13.5a3 3 0 0 0 3-3v-6a3 3 0 0 0-3-3H15a.75.75 0 0 0-.75.75 2.25 2.25 0 0 1-4.5 0A.75.75 0 0 0 9 9H5.25Z"/>
+  </g>
+</svg>

@@ -1,16 +1,22 @@
 import { prisma } from "./prisma";
-import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
+import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, SKIP_VENDOR_CATEGORIES, TOP_CATEGORY_EXCLUSIONS, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
 import { coversEveryName, getBalanceAt, getBalanceDelta } from "./accountSnapshots";
 import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
 import { startOfMonth, endOfMonth, format, subMonths } from "date-fns";
 import { getCurrentMonthKeyET, getCurrentDayET } from "./timezone";
-import { generateMonthRange, expenseCategoryFilter, rankingCategoryFilter, mapWithConcurrency, MONTH_QUERY_CONCURRENCY, type MonthEntry } from "./query-utils";
+import { generateMonthRange, expenseCategoryFilter, mapWithConcurrency, MONTH_QUERY_CONCURRENCY, type MonthEntry } from "./query-utils";
 
 const catFilter = expenseCategoryFilter();
 
-/** Same as catFilter, minus the categories excluded from the size rankings. */
-const rankFilter = rankingCategoryFilter();
+/**
+ * catFilter, minus the categories kept out of the Top categories widget.
+ *
+ * The exclusion is part of the query rather than a filter on the results,
+ * because the caller applies a LIMIT in the database: dropping the mortgage
+ * afterwards would leave four bars in a widget built for five.
+ */
+const topCategoriesFilter = expenseCategoryFilter(TOP_CATEGORY_EXCLUSIONS);
 
 /** One month loop, with a bounded number of months in flight. */
 function mapMonths<T>(
@@ -266,14 +272,14 @@ export async function getSavingsRateTrend(months: number = 12) {
   );
 }
 
-export async function getTopPayees(monthDate: Date, limit: number = 15) {
+async function topPayees(monthDate: Date, limit: number, skip: string[]) {
   const { start, end } = generateMonthRange(1, monthDate)[0];
 
   const results = await prisma.transaction.groupBy({
     by: ["payee"],
     where: {
       date: { gte: start, lte: end },
-      category: rankFilter,
+      category: expenseCategoryFilter(skip),
       payee: { not: null },
     },
     _sum: { amount: true },
@@ -287,6 +293,34 @@ export async function getTopPayees(monthDate: Date, limit: number = 15) {
       payee: r.payee!,
       amount: Math.abs(r._sum.amount || 0),
     }));
+}
+
+/** Every payee, biggest spend first. The analytics page's list. */
+export async function getTopPayees(monthDate: Date, limit: number = 15) {
+  return topPayees(monthDate, limit, []);
+}
+
+/**
+ * The dashboard's Top vendors widget: the same figures, minus
+ * SKIP_VENDOR_CATEGORIES.
+ *
+ * Two lists rather than one because the two charts answer different questions.
+ * The widget is read at a glance to see where the month went, and one mortgage
+ * payment several times the size of any shop flattens the ten bars under it
+ * into stubs. The analytics page is read deliberately, where the largest
+ * outgoing belongs.
+ *
+ * The unfiltered figures are unaffected: this hides rows from one chart and
+ * changes no total anywhere.
+ *
+ * Categories, not vendors: the filter drops transactions, and the grouping
+ * runs on what is left. A servicer that also charges an escrow fee under some
+ * other category keeps its bar, sized to that fee alone. Right for a chart
+ * about where the money went, and worth knowing before reading a small bar as
+ * the whole relationship with that vendor.
+ */
+export async function getTopVendors(monthDate: Date, limit: number = 15) {
+  return topPayees(monthDate, limit, SKIP_VENDOR_CATEGORIES);
 }
 
 export async function getBudgetAccuracy(monthDate: Date) {
@@ -516,7 +550,7 @@ export async function getTopExpenseCategories(monthDate: Date, limit: number = 5
     by: ["categoryId"],
     where: {
       date: { gte: start, lte: end },
-      category: rankFilter,
+      category: topCategoriesFilter,
       categoryId: { not: null },
     },
     _sum: { amount: true },

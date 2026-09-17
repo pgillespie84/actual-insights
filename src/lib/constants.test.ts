@@ -6,6 +6,8 @@ import {
   BUDGET_BUCKETS,
   BUSINESS_CATEGORIES,
   EXCLUDED_ACCOUNTS,
+  SKIP_VENDOR_CATEGORIES,
+  optionalNameList,
   getSavingsAccountNames,
   getNonMortgageDebtAccountNames,
   getPayableDebtAccountNames,
@@ -31,6 +33,14 @@ const REQUIRED_KEYS = [
   "NET_WORTH_GROUPS",
 ];
 
+/**
+ * Keys a config may leave out. Every config written before the key existed —
+ * including the one in the running container, which is an Unraid variable
+ * rather than a file in this repo — has to keep booting, so these cannot be
+ * asserted as present.
+ */
+const OPTIONAL_KEYS = ["SKIP_VENDOR_CATEGORIES"];
+
 const REQUIRED_NET_WORTH_GROUPS = [
   "Savings",
   "Retirement",
@@ -39,19 +49,32 @@ const REQUIRED_NET_WORTH_GROUPS = [
   "Debt — Credit Cards",
 ];
 
-test("loaded config has every required key", () => {
-  const config = loadConfig();
-  expect(Object.keys(config).sort()).toEqual([...REQUIRED_KEYS].sort());
+test("loaded config has every required key and no unknown one", () => {
+  const keys = Object.keys(loadConfig());
+  for (const key of REQUIRED_KEYS) expect(keys).toContain(key);
+  for (const key of keys) expect([...REQUIRED_KEYS, ...OPTIONAL_KEYS]).toContain(key);
 });
 
 test("example config matches the loaded config's schema", () => {
   const example = JSON.parse(
     readFileSync("config/dashboard.example.json", "utf8"),
   );
-  expect(Object.keys(example).sort()).toEqual([...REQUIRED_KEYS].sort());
+  const keys = Object.keys(example);
+  for (const key of REQUIRED_KEYS) expect(keys).toContain(key);
+  for (const key of keys) expect([...REQUIRED_KEYS, ...OPTIONAL_KEYS]).toContain(key);
   expect(Object.keys(example.NET_WORTH_GROUPS).sort()).toEqual(
     Object.keys(loadConfig().NET_WORTH_GROUPS).sort(),
   );
+});
+
+// The example carries the optional key so its shape is discoverable without
+// reading the source — a config file is the one place someone looks to find
+// out a setting exists.
+test("the example config documents every optional key", () => {
+  const example = JSON.parse(
+    readFileSync("config/dashboard.example.json", "utf8"),
+  );
+  for (const key of OPTIONAL_KEYS) expect(example).toHaveProperty(key);
 });
 
 test("constants re-export the loaded config", () => {
@@ -62,6 +85,43 @@ test("constants re-export the loaded config", () => {
   expect(BUSINESS_CATEGORIES).toEqual(config.BUSINESS_CATEGORIES);
   expect(EXCLUDED_ACCOUNTS).toEqual(config.EXCLUDED_ACCOUNTS);
   expect(NET_WORTH_GROUPS).toEqual(config.NET_WORTH_GROUPS);
+});
+
+// The constant itself can only be asserted against whichever config won, and
+// restating `?? []` here would pass for any default the module picked. The
+// fallback is tested through the function instead, on fixtures that cannot
+// depend on a gitignored file.
+test("SKIP_VENDOR_CATEGORIES is a list, whichever config was loaded", () => {
+  expect(Array.isArray(SKIP_VENDOR_CATEGORIES)).toBe(true);
+});
+
+test("optionalNameList passes a real list through untouched", () => {
+  expect(optionalNameList(["Mortgage", "Escrow"])).toEqual(["Mortgage", "Escrow"]);
+  expect(optionalNameList([])).toEqual([]);
+});
+
+// An absent key is the ordinary case — every config written before the setting
+// existed. Empty means "hide nothing", which is what those configs expect.
+test("optionalNameList turns an absent key into an empty list", () => {
+  expect(optionalNameList(undefined)).toEqual([]);
+  expect(optionalNameList(null)).toEqual([]);
+});
+
+// The setting is typed into an Unraid text box, where quoting one name as a
+// bare string is the easy mistake. Spread into a Prisma notIn it would become
+// one letter per entry and match nothing, so it has to be refused here.
+test("optionalNameList refuses a bare string rather than spreading it", () => {
+  expect(optionalNameList("Mortgage")).toEqual([]);
+  expect(optionalNameList({ Mortgage: true })).toEqual([]);
+});
+
+// A list holding a non-string is the one bad value that would not degrade
+// quietly: Prisma rejects a notIn of mixed types against a String column, so
+// the dashboard route would 500 rather than showing an unfiltered chart.
+test("optionalNameList drops a bad element and keeps the good ones", () => {
+  expect(optionalNameList(["Mortgage", 5])).toEqual(["Mortgage"]);
+  expect(optionalNameList([null])).toEqual([]);
+  expect(optionalNameList([["Mortgage"], "Escrow"])).toEqual(["Escrow"]);
 });
 
 test("NET_WORTH_GROUPS defines every group the queries depend on", () => {

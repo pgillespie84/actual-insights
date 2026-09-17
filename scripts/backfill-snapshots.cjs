@@ -7,7 +7,7 @@
  * true historical snapshots).
  *
  * Usage:
- *   docker exec -it actual-dashboard node scripts/backfill-snapshots.cjs
+ *   docker exec -it actual-insights node scripts/backfill-snapshots.cjs
  *
  * Idempotent: re-running overwrites existing rows via ON CONFLICT ... DO UPDATE.
  */

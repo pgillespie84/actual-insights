@@ -31,6 +31,7 @@ import type {
   getSavingsRateTrend,
   getTopExpenseCategories,
   getTopPayees,
+  getTopVendors,
   getTrendCategories,
 } from "@/lib/queries";
 
@@ -69,7 +70,8 @@ export interface DashboardResponse {
   household: string;
   dailySpending: Returns<typeof getDailySpending>;
   cashFlow: Returns<typeof getMonthCashFlow>;
-  topPayees: Returns<typeof getTopPayees>;
+  /** SKIP_VENDOR_CATEGORIES applied — see getTopVendors. */
+  topVendors: Returns<typeof getTopVendors>;
   lastSync: Returns<typeof getLastSync>;
   availableMonths: Returns<typeof getAvailableMonths>;
   insight: Returns<typeof getLatestInsight>;

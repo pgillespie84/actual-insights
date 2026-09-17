@@ -9,15 +9,24 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatAxisDollars, formatTickLabel } from "@/lib/format";
 
 interface TopVendorsData {
   payee: string;
   amount: number;
 }
 
+/**
+ * The prop stays required — the page has to pass it, and TypeScript should say
+ * so — but the read is guarded, because the dashboard payload's field was
+ * renamed. This bundle paired with an older or cached response body finds
+ * nothing under the new key, and an empty chart is a fair answer to that where
+ * slicing undefined takes the page down. It does nothing for the opposite
+ * skew: a tab still running the old bundle is running the old component too,
+ * and no edit here can reach it.
+ */
 export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
-  const chartData = data.slice(0, 10).map((d) => ({
+  const chartData = (data ?? []).slice(0, 10).map((d) => ({
     name: d.payee,
     amount: d.amount / 100,
   }));
@@ -37,7 +46,7 @@ export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
               stroke="var(--text-muted)"
               fontSize={10}
               tick={{ fill: "var(--text-muted)" }}
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={formatAxisDollars}
               axisLine={false}
               tickLine={false}
             />
@@ -48,6 +57,14 @@ export function TopVendorsChart({ data }: { data: TopVendorsData[] }) {
               fontSize={11}
               tick={{ fill: "var(--text-muted)" }}
               width={100}
+              // Every bar gets its name. Left to itself Recharts thins category
+              // ticks out when it thinks they collide, which is how bars went
+              // unlabelled next to a name long enough to wrap.
+              interval={0}
+              // Wrapped, not passed by reference: Recharts calls a tick
+              // formatter with (value, index), and the index would land in the
+              // character budget — every label truncated to its own position.
+              tickFormatter={(name: string) => formatTickLabel(name)}
               axisLine={false}
               tickLine={false}
             />
