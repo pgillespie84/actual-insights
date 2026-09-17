@@ -442,9 +442,13 @@ test("one dropped connection at the end does not erase fifty-nine answers", asyn
   });
 
   // "Nothing answered" is the only phrasing that speaks for the whole wait, so
-  // it needs the whole wait as evidence.
+  // it needs the whole wait as evidence. And the fifty-nine proxy envelopes
+  // are the stronger, still-true signal, so the final blip must not bury them
+  // or the reader gets sent to reload a page when the proxy is the problem.
   expect(screen.queryByText(/Nothing answered while waiting/)).toBeNull();
   expect(
-    screen.getByText("The last attempt got no answer — reload the page to see where it got to."),
+    screen.getByText(
+      "The last attempt got no answer. Before that: Something answered while waiting, but not the jobs endpoint — check what is in front of the app.",
+    ),
   ).toBeTruthy();
 });

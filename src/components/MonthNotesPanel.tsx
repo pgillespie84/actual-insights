@@ -95,18 +95,22 @@ const GATEWAY_STATUSES = [502, 503, 504];
 function waitingMessage(
   reachedJobsEndpoint: boolean,
   last: PollObservation | null,
-  everAnswered: boolean,
+  lastAnswer: PollObservation | null,
 ): string {
   const reload = "reload the page to see where it got to";
   const inFront = "check what is in front of the app";
 
-  if (reachedJobsEndpoint || last === null) return `Still running — ${reload}.`;
+  if (reachedJobsEndpoint) return `Still running — ${reload}.`;
+  // Defensive: every iteration records something today. If a future edit can
+  // end the wait before the first attempt, that is not evidence the job is
+  // running — it is evidence of nothing.
+  if (last === null) return `The wait ended before anything was checked — ${reload}.`;
 
   switch (last.kind) {
     case "reached":
       // Unreachable while the caller sets reachedJobsEndpoint alongside it,
-      // but stated rather than left to the default, so a later edit that
-      // separates them does not print "nothing answered" about a job we read.
+      // but stated rather than left to a default, so a later edit that
+      // separates them does not print the wrong thing about a job we read.
       return `Still running — ${reload}.`;
     case "http":
       return GATEWAY_STATUSES.includes(last.status)
@@ -120,16 +124,19 @@ function waitingMessage(
       return `Something went wrong while waiting — there may be more in the browser console.`;
     case "unreachable":
       // The absolute phrasing is the only one that claims the whole wait, so
-      // it needs the only flag that observed the whole wait. Fifty-nine
-      // answers and one dropped connection is not "nothing answered".
-      return everAnswered
-        ? `The last attempt got no answer — ${reload}.`
-        : `Nothing answered while waiting — ${reload}.`;
+      // it needs an observation of the whole wait. And when something did
+      // answer earlier, that is the stronger, probably still-true signal —
+      // reporting only the final blip would point the reader at the wrong
+      // thing, so the earlier answer is carried rather than discarded.
+      return lastAnswer === null
+        ? `Nothing answered while waiting — ${reload}.`
+        : `The last attempt got no answer. Before that: ${waitingMessage(false, lastAnswer, null)}`;
     default: {
-      // Exhaustiveness: a new kind is a compile error here rather than a
-      // silent fall-through into the wrong sentence.
+      // Exhaustiveness. The cast-in-from-outside case throws rather than
+      // returning undefined, which would render an empty status line — the
+      // silent no-op this whole panel exists to avoid.
       const never: never = last;
-      return never;
+      throw new Error(`Unhandled poll observation: ${JSON.stringify(never)}`);
     }
   }
 }
@@ -509,10 +516,18 @@ export function MonthNotesPanel({
     // can point at it rather than guess.
     let last: PollObservation | null = null;
     let reachedJobsEndpoint = false;
-    // Whether any attempt ever got a reply at all, which is the only thing
-    // that entitles the ending to speak about the whole wait rather than about
-    // the attempt it finished on.
-    let everAnswered = false;
+
+    // The most recent observation where something actually replied. Only an
+    // observation of this kind entitles the ending to speak about the wait
+    // rather than about the attempt it finished on, and it keeps the earlier
+    // evidence around so a final dropped connection cannot erase it.
+    let lastAnswer: PollObservation | null = null;
+
+    /** `answered` is whether a response object came back, not whether it was useful. */
+    const record = (observation: PollObservation, answered: boolean) => {
+      last = observation;
+      if (answered) lastAnswer = observation;
+    };
 
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -531,9 +546,8 @@ export function MonthNotesPanel({
         if (res.status === 401) {
           return { state: "failed", message: "Session expired — sign in again." };
         }
-        everAnswered = true;
         if (!res.ok) {
-          last = { kind: "http", status: res.status };
+          record({ kind: "http", status: res.status }, true);
           // Logged like its two sibling non-answers: the status line names one
           // code, and which codes came in what order is the rest of the story.
           console.error(`The jobs endpoint answered HTTP ${res.status}.`);
@@ -546,12 +560,14 @@ export function MonthNotesPanel({
         // TypeError on a body that parsed to null — calling that "nothing
         // answered" would be the same guess request() exists to avoid.
         if (err instanceof UnreadableReply) {
-          everAnswered = true;
-          last = { kind: "unreadable" };
+          // A body arrived, it just could not be parsed.
+          record({ kind: "unreadable" }, true);
         } else if (err instanceof Unreachable) {
-          last = { kind: "unreachable" };
+          record({ kind: "unreachable" }, false);
         } else {
-          last = { kind: "unexpected" };
+          // Something other than the request failed, so whether the server
+          // answered is not among the things this attempt established.
+          record({ kind: "unexpected" }, false);
         }
         // The only failure path that does not reach describeFetchFailure, so
         // it has to log for itself. A wait that ran two minutes and learned
@@ -566,11 +582,11 @@ export function MonthNotesPanel({
         // is logged for the same reason the catch above is: otherwise this is
         // a silent two-minute wait with an empty console.
         console.error("The jobs endpoint answered without a jobs object.");
-        last = { kind: "no-jobs" };
+        record({ kind: "no-jobs" }, true);
         continue;
       }
       reachedJobsEndpoint = true;
-      last = { kind: "reached" };
+      record({ kind: "reached" }, true);
 
       const job = jobs.insights;
       if (job?.state === "failed") {
@@ -586,7 +602,7 @@ export function MonthNotesPanel({
     // so this belongs in the status line rather than the red box.
     return {
       state: "timeout",
-      message: waitingMessage(reachedJobsEndpoint, last, everAnswered),
+      message: waitingMessage(reachedJobsEndpoint, last, lastAnswer),
     };
   }
 
