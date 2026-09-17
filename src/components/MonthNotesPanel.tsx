@@ -3,6 +3,18 @@
 import { useCallback, useEffect, useState } from "react";
 import { MAX_NOTE_LENGTH, monthsCovered, nextMonthKey } from "@/lib/monthNoteShape.cjs";
 
+/**
+ * What waiting on the insights job can tell us.
+ *
+ * "ran" carries no message on purpose: the script exiting zero says nothing
+ * about whether an insight was written, so there is nothing truthful to report
+ * until the caller checks.
+ */
+type JobOutcome =
+  | { state: "ran" }
+  | { state: "failed"; message: string }
+  | { state: "timeout"; message: string };
+
 interface NotesPayload {
   notes: MonthNote[];
   insights: Record<string, string>;
@@ -40,45 +52,45 @@ export function staleMonths(
   });
 }
 
-/**
- * How many months after its own an in-progress insight carries.
- *
- * `buildInsight` gathers prev1..prev3 alongside the current month, and
- * `gatherMonthData` puts each month's notes into its own payload. So an August
- * note is physically present in the September, October and November
- * in-progress insights, not only August's — and those are the insights someone
- * actually reads. Anything asking which insights a note touches has to include
- * them.
- */
+/** How many months of context an in-progress insight gathers. */
 const COMPARISON_MONTHS = 3;
 
 /**
- * Every month whose insight a note can reach, up to the current month.
+ * Every month whose insight can contain a note.
  *
- * Two things are going on. The note's own months come from its range. The
- * three months after its last one come from the comparison window above.
+ * The note's own months, obviously, since the fetch matches on its range. Plus
+ * the current month, when it is close enough behind: `buildInsight` gathers the
+ * previous three months alongside an in-progress month and `gatherMonthData`
+ * puts each one's notes into its own payload, so an August note really is in
+ * the September in-progress insight — and that is the insight someone reads.
  *
- * The clamp matters because a note can legitimately run into a future month —
- * a remodel booked through October, written in September — and Actual Budget
- * hands us budget months ahead of today, so those months appear in the
- * dropdown. But `generate-insight.cjs` writes nothing for a month with no
- * spending and `--backfill` skips future months outright, so a future month
- * can never stop being stale. Flagging it would leave a warning and a button
- * that do nothing however many times they are pressed, which is the loop this
- * feature exists to remove. The note still reaches that month once it arrives,
- * because the fetch matches on the range.
+ * Only the current month, though. Exactly one month is in progress at a time;
+ * every other month's stored insight is a completed recap, and a completed
+ * payload has no comparison block at all. An intermediate month can therefore
+ * never hold the note, so listing it would offer a paid Claude call that could
+ * not put the note where it claimed, and then clear the warning anyway because
+ * the timestamp moved.
+ *
+ * Months ahead of the current one are excluded for a different reason:
+ * `generate-insight.cjs` writes nothing for a month with no spending and
+ * `--backfill` skips future months, so a future month could never stop being
+ * stale — a warning and a button that do nothing however often they are
+ * pressed. The note still reaches that month once it arrives.
  */
 function influencedMonths(note: MonthNote, currentMonth: string): string[] {
-  const covered = monthsCovered(note) as string[];
+  const covered = (monthsCovered(note) as string[]).filter((m) => m <= currentMonth);
   if (covered.length === 0) return [];
 
-  const months = [...covered];
-  let month = months[months.length - 1];
+  const last = covered[covered.length - 1];
+  if (currentMonth <= last) return covered;
+
+  // Within the comparison window, so the in-progress insight carries it.
+  let edge = last;
   for (let i = 0; i < COMPARISON_MONTHS; i++) {
-    month = nextMonthKey(month) as string;
-    months.push(month);
+    edge = nextMonthKey(edge) as string;
+    if (edge === currentMonth) return [...covered, currentMonth];
   }
-  return months.filter((m) => m <= currentMonth);
+  return covered;
 }
 
 /**
@@ -238,7 +250,7 @@ export function MonthNotesPanel({
 
       // A failure belongs in the red box with the other errors, not in the
       // muted status line where it reads like progress.
-      if (!result.ok) {
+      if (result.state === "failed") {
         setStatus(null);
         setError(result.message);
         await load();
@@ -246,8 +258,17 @@ export function MonthNotesPanel({
       }
 
       const after = await load();
-      if (!result.finished) {
+
+      if (result.state === "timeout") {
         setStatus(result.message);
+        return;
+      }
+
+      // The reload is the evidence, so without it there is nothing to claim.
+      // load() has already put its own error on screen; clearing the banner
+      // here would throw away the thing that would prompt a retry.
+      if (after === null) {
+        setStatus(null);
         return;
       }
 
@@ -256,14 +277,14 @@ export function MonthNotesPanel({
       // line is always "Done." so the runner's summary cannot tell us either.
       // Whether the insight moved is the only honest signal, and saying
       // "regenerated" without it is the never-clearing loop one layer up.
-      if (after && after.insights[month] === before) {
+      if (after.insights[month] === before) {
         setStatus(
           `Nothing was written for ${month} — there is no spending recorded for it yet.`,
         );
         return;
       }
 
-      setStatus(result.message);
+      setStatus("Insight regenerated.");
       setOrphaned((months) => months.filter((m) => m !== month));
     } finally {
       setBusy(false);
@@ -277,15 +298,12 @@ export function MonthNotesPanel({
    * reports after a restart took the job down with it, and calling that
    * success would tell the user an insight was written when it was not.
    */
-  async function waitForInsightsJob(): Promise<
-    | { ok: true; finished: boolean; message: string }
-    | { ok: false; finished: boolean; message: string }
-  > {
+  async function waitForInsightsJob(): Promise<JobOutcome> {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const res = await fetch("/api/admin/jobs");
       if (res.status === 401) {
-        return { ok: false, finished: false, message: "Session expired — sign in again." };
+        return { state: "failed", message: "Session expired — sign in again." };
       }
       if (!res.ok) continue;
       const { jobs } = (await res.json()) as {
@@ -293,17 +311,20 @@ export function MonthNotesPanel({
       };
       const job = jobs.insights;
       if (job?.state === "failed") {
-        return { ok: false, finished: true, message: `Regeneration failed: ${job.message ?? "no message"}` };
+        return { state: "failed", message: `Regeneration failed: ${job.message ?? "no message"}` };
       }
       if (job?.state === "success") {
-        // Success only means the script exited zero. Whether an insight was
-        // actually written is checked by the caller.
-        return { ok: true, finished: true, message: "Insight regenerated." };
+        // Only that the script exited zero. Whether an insight was actually
+        // written is the caller's question.
+        return { state: "ran" };
       }
     }
     // Ran out of patience, not evidence of failure. The job may well be fine,
     // so this belongs in the status line rather than the red box.
-    return { ok: true, finished: false, message: "Still running — reload the page to see where it got to." };
+    return {
+      state: "timeout",
+      message: "Still running — reload the page to see where it got to.",
+    };
   }
 
   const button =

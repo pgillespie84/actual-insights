@@ -151,7 +151,6 @@ function formatNoteForPrompt(note) {
 
 module.exports = {
   NOTE_TAG_OPEN,
-  stripNoteTags,
   NOTE_TAG_CLOSE,
   MAX_NOTE_LENGTH,
   MAX_NOTES_PER_MONTH,

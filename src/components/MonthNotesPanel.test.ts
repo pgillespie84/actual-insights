@@ -72,30 +72,35 @@ test("quoting and stale never claim the same month", () => {
   expect(stale.filter((m) => quoting.includes(m))).toEqual([]);
 });
 
-test("a note is stale in the months whose in-progress insight also carries it", () => {
+const august = { ...note, monthStart: "2026-08", monthEnd: null };
+
+test("a note is stale in the in-progress month whose insight also carries it", () => {
   // An in-progress insight gathers the previous three months and each carries
   // its own notes, so an August note is physically in the September insight.
   // Checking August alone would call the note seen while the insight someone
   // actually reads never received it.
-  const august = { ...note, monthStart: "2026-08", monthEnd: null };
   expect(staleMonths(august, { "2026-08": AFTER }, CURRENT)).toEqual(["2026-09"]);
 });
 
-test("the comparison window stops at the current month", () => {
-  const august = { ...note, monthStart: "2026-08", monthEnd: null };
-  // August plus three would reach November; only months that can hold an
-  // insight are asked.
-  expect(staleMonths(august, {}, CURRENT)).toEqual(["2026-08", "2026-09"]);
-  expect(staleMonths(august, {}, "2026-11")).toEqual([
-    "2026-08",
-    "2026-09",
-    "2026-10",
-    "2026-11",
-  ]);
+test("only the current month is added, never an intermediate one", () => {
+  // Exactly one month is in progress. September's and October's stored
+  // insights are completed recaps, and a completed payload has no comparison
+  // block, so neither can hold an August note. Offering them would be a paid
+  // call that could not do what the button says, followed by a false "seen".
+  expect(staleMonths(august, {}, "2026-11")).toEqual(["2026-08", "2026-11"]);
 });
 
-test("deleting a note offers the later insights that carried it, not just its own month", () => {
-  const august = { ...note, monthStart: "2026-08", monthEnd: null };
+test("past the comparison window the current month is not carrying it either", () => {
+  // August plus three is November. By December the in-progress insight reaches
+  // back only to September, so August is not in it.
+  expect(staleMonths(august, {}, "2026-12")).toEqual(["2026-08"]);
+});
+
+test("a note in the current month is not also blamed on a later one", () => {
+  expect(staleMonths(note, {}, CURRENT)).toEqual(["2026-09"]);
+});
+
+test("deleting a note offers the in-progress insight that carried it too", () => {
   expect(monthsQuoting(august, { "2026-08": AFTER, "2026-09": AFTER }, CURRENT)).toEqual([
     "2026-08",
     "2026-09",
