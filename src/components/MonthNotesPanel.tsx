@@ -3,14 +3,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { MAX_NOTE_LENGTH, monthsCovered, nextMonthKey } from "@/lib/monthNoteShape.cjs";
 
-/**
- * Reads a JSON body, marking a parse failure as its own kind of problem.
- *
- * A 200 with a truncated or non-JSON body — a proxy error page, a stream cut
- * short — means the server was reached and answered, so reporting it as
- * unreachable would be wrong. The rest of this panel is careful to claim only
- * what it can evidence; this keeps that true of its error messages too.
- */
 /** The request never got an answer. */
 class Unreachable extends Error {}
 
@@ -35,6 +27,14 @@ async function request(url: string, init?: RequestInit): Promise<Response> {
   }
 }
 
+/**
+ * Reads a JSON body, marking a parse failure as its own kind of problem.
+ *
+ * A 200 with a truncated or non-JSON body — a proxy error page, a stream cut
+ * short — means the server was reached and answered, so reporting it as
+ * unreachable would be wrong. The rest of this panel is careful to claim only
+ * what it can evidence; this keeps that true of its error messages too.
+ */
 async function readJson<T>(res: Response): Promise<T> {
   try {
     return (await res.json()) as T;
@@ -427,7 +427,7 @@ export function MonthNotesPanel({
       // A dropped connection partway through a two-minute poll is not evidence
       // about the job, so it is worth another go round. Running out of
       // iterations is already reported honestly as a timeout.
-      let jobs: Record<string, { state: string; message: string | null }>;
+      let jobs: Record<string, { state: string; message: string | null }> | undefined;
       try {
         const res = await request("/api/admin/jobs");
         // A resolved request is the evidence that something answered. Whether
@@ -441,11 +441,17 @@ export function MonthNotesPanel({
         ({ jobs } = await readJson<{
           jobs: Record<string, { state: string; message: string | null }>;
         }>(res));
-      } catch {
+      } catch (err) {
+        // The only failure path that does not reach describeFetchFailure, so
+        // it has to log for itself. A wait that ran two minutes and learned
+        // nothing is the one most worth leaving a trace of.
+        console.error(err);
         continue;
       }
 
-      const job = jobs.insights;
+      // Outside the try, a reply that parsed but carries no jobs would end the
+      // wait rather than costing an attempt like every other non-answer.
+      const job = jobs?.insights;
       if (job?.state === "failed") {
         return { state: "failed", message: `Regeneration failed: ${job.message ?? "no message"}` };
       }

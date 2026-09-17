@@ -1,4 +1,4 @@
-import { test, expect, vi, afterEach } from "vitest";
+import { test, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import { MonthNotesPanel } from "./MonthNotesPanel";
 
@@ -24,9 +24,16 @@ function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
 }
 
+// These suites drive failure paths on purpose, and the panel logs every one.
+// Silenced so a passing run is quiet and a real failure still stands out.
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 async function renderPanel() {
@@ -217,3 +224,33 @@ test("a wait where nothing ever answered does not claim the job is still running
   ).toBeTruthy();
 });
 
+test("a reply that parses but carries no jobs costs an attempt, not the wait", async () => {
+  vi.useFakeTimers();
+
+  let jobLooks = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      jobLooks += 1;
+      // Something in front of the app answering 200 with its own envelope.
+      if (jobLooks === 1) return jsonResponse({ error: "bad gateway" });
+      return jsonResponse({
+        jobs: { insights: { state: "failed", message: "no API key" } },
+      });
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(4000);
+  });
+
+  // Reaching this at all means the malformed reply did not end the wait.
+  expect(screen.getByText("Regeneration failed: no API key")).toBeTruthy();
+});
