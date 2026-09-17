@@ -70,7 +70,8 @@ type PollObservation =
   | { kind: "http"; status: number }
   | { kind: "no-jobs" }
   | { kind: "unreadable" }
-  | { kind: "unreachable" };
+  | { kind: "unreachable" }
+  | { kind: "unexpected" };
 
 /** Statuses a reverse proxy returns for a backend it could not use. */
 const GATEWAY_STATUSES = [502, 503, 504];
@@ -94,13 +95,19 @@ const GATEWAY_STATUSES = [502, 503, 504];
 function waitingMessage(
   reachedJobsEndpoint: boolean,
   last: PollObservation | null,
+  everAnswered: boolean,
 ): string {
   const reload = "reload the page to see where it got to";
   const inFront = "check what is in front of the app";
 
-  if (reachedJobsEndpoint) return `Still running — ${reload}.`;
+  if (reachedJobsEndpoint || last === null) return `Still running — ${reload}.`;
 
-  switch (last?.kind) {
+  switch (last.kind) {
+    case "reached":
+      // Unreachable while the caller sets reachedJobsEndpoint alongside it,
+      // but stated rather than left to the default, so a later edit that
+      // separates them does not print "nothing answered" about a job we read.
+      return `Still running — ${reload}.`;
     case "http":
       return GATEWAY_STATUSES.includes(last.status)
         ? `Got HTTP ${last.status} while waiting — ${inFront}.`
@@ -109,8 +116,21 @@ function waitingMessage(
       return `Something answered while waiting, but not the jobs endpoint — ${inFront}.`;
     case "unreadable":
       return `Something answered while waiting but the reply could not be read — ${inFront}.`;
-    default:
-      return `Nothing answered while waiting — ${reload}.`;
+    case "unexpected":
+      return `Something went wrong while waiting — there may be more in the browser console.`;
+    case "unreachable":
+      // The absolute phrasing is the only one that claims the whole wait, so
+      // it needs the only flag that observed the whole wait. Fifty-nine
+      // answers and one dropped connection is not "nothing answered".
+      return everAnswered
+        ? `The last attempt got no answer — ${reload}.`
+        : `Nothing answered while waiting — ${reload}.`;
+    default: {
+      // Exhaustiveness: a new kind is a compile error here rather than a
+      // silent fall-through into the wrong sentence.
+      const never: never = last;
+      return never;
+    }
   }
 }
 
@@ -489,6 +509,10 @@ export function MonthNotesPanel({
     // can point at it rather than guess.
     let last: PollObservation | null = null;
     let reachedJobsEndpoint = false;
+    // Whether any attempt ever got a reply at all, which is the only thing
+    // that entitles the ending to speak about the whole wait rather than about
+    // the attempt it finished on.
+    let everAnswered = false;
 
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -507,15 +531,28 @@ export function MonthNotesPanel({
         if (res.status === 401) {
           return { state: "failed", message: "Session expired — sign in again." };
         }
+        everAnswered = true;
         if (!res.ok) {
           last = { kind: "http", status: res.status };
+          // Logged like its two sibling non-answers: the status line names one
+          // code, and which codes came in what order is the rest of the story.
+          console.error(`The jobs endpoint answered HTTP ${res.status}.`);
           continue;
         }
         ({ jobs } = await readJson<JobsReply>(res));
       } catch (err) {
-        // A reply that could not be read is not the same observation as no
-        // reply at all, and they send the reader to different places.
-        last = err instanceof UnreadableReply ? { kind: "unreadable" } : { kind: "unreachable" };
+        // Classified by what the error is, never by what it is not. The other
+        // statement in this try is a destructure, which throws a plain
+        // TypeError on a body that parsed to null — calling that "nothing
+        // answered" would be the same guess request() exists to avoid.
+        if (err instanceof UnreadableReply) {
+          everAnswered = true;
+          last = { kind: "unreadable" };
+        } else if (err instanceof Unreachable) {
+          last = { kind: "unreachable" };
+        } else {
+          last = { kind: "unexpected" };
+        }
         // The only failure path that does not reach describeFetchFailure, so
         // it has to log for itself. A wait that ran two minutes and learned
         // nothing is the one most worth leaving a trace of.
@@ -549,7 +586,7 @@ export function MonthNotesPanel({
     // so this belongs in the status line rather than the red box.
     return {
       state: "timeout",
-      message: waitingMessage(reachedJobsEndpoint, last),
+      message: waitingMessage(reachedJobsEndpoint, last, everAnswered),
     };
   }
 

@@ -415,3 +415,36 @@ test("a reply nothing could read is not reported as the job still running", asyn
     ),
   ).toBeTruthy();
 });
+
+test("one dropped connection at the end does not erase fifty-nine answers", async () => {
+  vi.useFakeTimers();
+
+  let jobLooks = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      jobLooks += 1;
+      // Answers all the way, then the connection drops on the final attempt.
+      if (jobLooks >= 60) throw new TypeError("Failed to fetch");
+      return jsonResponse({ error: "bad gateway" });
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000 * 61);
+  });
+
+  // "Nothing answered" is the only phrasing that speaks for the whole wait, so
+  // it needs the whole wait as evidence.
+  expect(screen.queryByText(/Nothing answered while waiting/)).toBeNull();
+  expect(
+    screen.getByText("The last attempt got no answer — reload the page to see where it got to."),
+  ).toBeTruthy();
+});
