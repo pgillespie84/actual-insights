@@ -66,10 +66,12 @@ const COMPARISON_MONTHS = 3;
  *
  * Only the current month, though. Exactly one month is in progress at a time;
  * every other month's stored insight is a completed recap, and a completed
- * payload has no comparison block at all. An intermediate month can therefore
- * never hold the note, so listing it would offer a paid Claude call that could
- * not put the note where it claimed, and then clear the warning anyway because
- * the timestamp moved.
+ * payload has no comparison block at all. So once an intermediate month's
+ * recap has been written it cannot hold the note, and listing it would offer a
+ * paid Claude call that could not put the note where it claimed, then clear
+ * the warning anyway because the timestamp moved. (A recap that was never
+ * written is a different matter, and `possiblyQuotingMonths` handles it — but
+ * that is a reason to offer a rewrite, not to claim a note has not landed.)
  *
  * Months ahead of the current one are excluded for a different reason:
  * `generate-insight.cjs` writes nothing for a month with no spending and
@@ -193,15 +195,23 @@ export function MonthNotesPanel({
    * whether an insight was actually written.
    */
   const load = useCallback(async (): Promise<NotesPayload | null> => {
-    const res = await fetch("/api/admin/notes");
-    if (!res.ok) {
-      setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
+    // Never throws. Callers treat null as "no evidence", and a rejection here
+    // would escape through an onClick and take the caller's own error message
+    // with it — leaving a panel that reports nothing at all.
+    try {
+      const res = await fetch("/api/admin/notes");
+      if (!res.ok) {
+        setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
+        return null;
+      }
+      const data = (await res.json()) as NotesPayload;
+      setNotes(data.notes);
+      setInsights(data.insights);
+      return data;
+    } catch {
+      setError("Could not reach the server.");
       return null;
     }
-    const data = (await res.json()) as NotesPayload;
-    setNotes(data.notes);
-    setInsights(data.insights);
-    return data;
   }, []);
 
   useEffect(() => {
@@ -390,9 +400,8 @@ export function MonthNotesPanel({
         <div className="rounded-lg border border-card-border bg-card-bg px-4 py-3 text-sm text-text-secondary">
           <p>
             The {orphaned.length === 1 ? "insight" : "insights"} for{" "}
-            {orphaned.join(", ")} still {orphaned.length === 1 ? "quotes" : "quote"} the
-            note you just deleted. Regenerate to write {orphaned.length === 1 ? "it" : "them"}{" "}
-            without it.
+            {orphaned.join(", ")} may still quote the note you just deleted.
+            Regenerate any that should be written without it.
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {orphaned.map((month) => (
