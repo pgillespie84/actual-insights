@@ -1,5 +1,10 @@
 import { test, expect, vi } from "vitest";
-import { staleMonths, monthsQuoting, describeFetchFailure } from "./MonthNotesPanel";
+import {
+  staleMonths,
+  monthsQuoting,
+  describeFetchFailure,
+  waitingMessage,
+} from "./MonthNotesPanel";
 
 const NOW = "2026-09-16T12:00:00.000Z";
 const BEFORE = "2026-09-16T08:00:00.000Z";
@@ -157,4 +162,51 @@ test("a throw that says nothing about the network is not described as if it did"
   } finally {
     logged.mockRestore();
   }
+});
+
+const RELOAD = "reload the page to see where it got to";
+const IN_FRONT = "check what is in front of the app";
+
+test("a wait that reached the endpoint is the only one that says the job may still be running", () => {
+  expect(waitingMessage(true, { kind: "unreachable" }, null)).toBe(`Still running — ${RELOAD}.`);
+  expect(waitingMessage(false, { kind: "reached" }, null)).toBe(`Still running — ${RELOAD}.`);
+});
+
+test("each way of failing to read the job points somewhere different", () => {
+  // A status code carries no provenance, so only the gateway ones — what a
+  // proxy returns for a backend it could not use — point past the app.
+  expect(waitingMessage(false, { kind: "http", status: 500 }, null)).toBe(
+    `The jobs endpoint answered HTTP 500 — ${RELOAD}.`,
+  );
+  expect(waitingMessage(false, { kind: "http", status: 502 }, null)).toBe(
+    `Got HTTP 502 while waiting — ${IN_FRONT}.`,
+  );
+  expect(waitingMessage(false, { kind: "no-jobs" }, null)).toContain(IN_FRONT);
+  expect(waitingMessage(false, { kind: "unreadable" }, null)).toContain(IN_FRONT);
+  expect(waitingMessage(false, { kind: "unexpected" }, null)).toContain("browser console");
+});
+
+test("only a wait where nothing ever replied claims the whole wait", () => {
+  expect(waitingMessage(false, { kind: "unreachable" }, null)).toBe(
+    `Nothing answered while waiting — ${RELOAD}.`,
+  );
+  expect(waitingMessage(false, { kind: "unreachable" }, { kind: "no-jobs" })).toBe(
+    `The last attempt got no answer. Before that: Something answered while waiting, but not the jobs endpoint — ${IN_FRONT}.`,
+  );
+});
+
+test("a wait that ended before checking anything says that, rather than assuming the job runs", () => {
+  expect(waitingMessage(false, null, null)).toBe(
+    `The wait ended before anything was checked — ${RELOAD}.`,
+  );
+});
+
+test("an observation from outside the type system fails loudly instead of rendering nothing", () => {
+  // Returning undefined here would set the status line to an empty string —
+  // the silent no-op this panel exists to remove.
+  expect(() =>
+    waitingMessage(false, { kind: "from-the-future" } as unknown as Parameters<
+      typeof waitingMessage
+    >[1], null),
+  ).toThrow(/Unhandled poll observation/);
 });

@@ -73,6 +73,17 @@ type PollObservation =
   | { kind: "unreachable" }
   | { kind: "unexpected" };
 
+/**
+ * An observation that means something replied.
+ *
+ * Kept as a type rather than a flag beside each observation, so the two cannot
+ * drift apart. Without it, recording a dropped connection as an answer is a
+ * one-character slip that compiles and renders "The last attempt got no
+ * answer. Before that: Nothing answered while waiting" — a sentence that
+ * contradicts its own second clause.
+ */
+type AnsweredObservation = Exclude<PollObservation, { kind: "unreachable" | "unexpected" }>;
+
 /** Statuses a reverse proxy returns for a backend it could not use. */
 const GATEWAY_STATUSES = [502, 503, 504];
 
@@ -92,10 +103,10 @@ const GATEWAY_STATUSES = [502, 503, 504];
  * returns for a backend it could not reach, so blaming the app for one would be
  * the same guess this panel refuses to make about a body that parses.
  */
-function waitingMessage(
+export function waitingMessage(
   reachedJobsEndpoint: boolean,
   last: PollObservation | null,
-  lastAnswer: PollObservation | null,
+  lastAnswer: AnsweredObservation | null,
 ): string {
   const reload = "reload the page to see where it got to";
   const inFront = "check what is in front of the app";
@@ -521,13 +532,11 @@ export function MonthNotesPanel({
     // observation of this kind entitles the ending to speak about the wait
     // rather than about the attempt it finished on, and it keeps the earlier
     // evidence around so a final dropped connection cannot erase it.
-    let lastAnswer: PollObservation | null = null;
-
-    /** `answered` is whether a response object came back, not whether it was useful. */
-    const record = (observation: PollObservation, answered: boolean) => {
-      last = observation;
-      if (answered) lastAnswer = observation;
-    };
+    //
+    // Assigned inline below rather than through a helper: TypeScript does not
+    // track writes made inside a nested function, so a helper would narrow
+    // both of these to null everywhere they are read here.
+    let lastAnswer: AnsweredObservation | null = null;
 
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -547,7 +556,7 @@ export function MonthNotesPanel({
           return { state: "failed", message: "Session expired — sign in again." };
         }
         if (!res.ok) {
-          record({ kind: "http", status: res.status }, true);
+          last = lastAnswer = { kind: "http", status: res.status };
           // Logged like its two sibling non-answers: the status line names one
           // code, and which codes came in what order is the rest of the story.
           console.error(`The jobs endpoint answered HTTP ${res.status}.`);
@@ -561,13 +570,13 @@ export function MonthNotesPanel({
         // answered" would be the same guess request() exists to avoid.
         if (err instanceof UnreadableReply) {
           // A body arrived, it just could not be parsed.
-          record({ kind: "unreadable" }, true);
+          last = lastAnswer = { kind: "unreadable" };
         } else if (err instanceof Unreachable) {
-          record({ kind: "unreachable" }, false);
+          last = { kind: "unreachable" };
         } else {
           // Something other than the request failed, so whether the server
           // answered is not among the things this attempt established.
-          record({ kind: "unexpected" }, false);
+          last = { kind: "unexpected" };
         }
         // The only failure path that does not reach describeFetchFailure, so
         // it has to log for itself. A wait that ran two minutes and learned
@@ -582,11 +591,11 @@ export function MonthNotesPanel({
         // is logged for the same reason the catch above is: otherwise this is
         // a silent two-minute wait with an empty console.
         console.error("The jobs endpoint answered without a jobs object.");
-        record({ kind: "no-jobs" }, true);
+        last = lastAnswer = { kind: "no-jobs" };
         continue;
       }
       reachedJobsEndpoint = true;
-      record({ kind: "reached" }, true);
+      last = lastAnswer = { kind: "reached" };
 
       const job = jobs.insights;
       if (job?.state === "failed") {
