@@ -24,6 +24,17 @@ function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
 }
 
+/** A reply that arrives and cannot be parsed: a proxy error page, a cut stream. */
+function unreadableResponse() {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => {
+      throw new SyntaxError("Unexpected token <");
+    },
+  } as unknown as Response;
+}
+
 /**
  * The panel logs every failure it reports, and these suites drive failure paths
  * on purpose, so a passing run would otherwise be a wall of stacks.
@@ -53,10 +64,16 @@ afterEach(() => {
   // registration order, so its would otherwise run after console.error has
   // been restored — and any act warning raised during unmount would go to the
   // real console unasserted.
-  cleanup();
-  vi.unstubAllGlobals();
-  vi.useRealTimers();
-  vi.restoreAllMocks();
+  //
+  // In a finally, so an unmount that throws cannot leave fake timers, a
+  // stubbed fetch and a swallowed console for every test after it.
+  try {
+    cleanup();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
   expect(reactWarnings).toEqual([]);
 });
 
@@ -118,16 +135,7 @@ test("a failed job reports why, even when the reload fails too", async () => {
 });
 
 test("a reply that arrives but cannot be read is not reported as unreachable", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => ({
-      ok: true,
-      status: 200,
-      json: async () => {
-        throw new SyntaxError("Unexpected token <");
-      },
-    })),
-  );
+  vi.stubGlobal("fetch", vi.fn(async () => unreadableResponse()));
 
   render(<MonthNotesPanel months={["2026-09"]} currentMonth="2026-09" />);
 
@@ -345,6 +353,65 @@ test("an endpoint that keeps erroring is not blamed on whatever is in front of i
   // The app's own endpoint is erroring. Sending the reader to check the proxy
   // would be pointing at the wrong thing entirely.
   expect(
-    screen.getByText("The jobs endpoint kept answering HTTP 500 — reload the page to see where it got to."),
+    screen.getByText("The jobs endpoint answered HTTP 500 — reload the page to see where it got to."),
+  ).toBeTruthy();
+});
+
+test("a gateway status is not blamed on the app behind it", async () => {
+  vi.useFakeTimers();
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      return jsonResponse({}, 502);
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000 * 61);
+  });
+
+  // 502 is what a proxy returns for a backend it could not reach. Inferring
+  // provenance from a status code is the guess this panel refuses to make
+  // about a body that parses, and it is no safer here.
+  expect(
+    screen.getByText("Got HTTP 502 while waiting — check what is in front of the app."),
+  ).toBeTruthy();
+});
+
+test("a reply nothing could read is not reported as the job still running", async () => {
+  vi.useFakeTimers();
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      return unreadableResponse();
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000 * 61);
+  });
+
+  // Something answered sixty times and nothing ever read the job, so calling
+  // it still running would be a claim about something never observed.
+  expect(
+    screen.getByText(
+      "Something answered while waiting but the reply could not be read — check what is in front of the app.",
+    ),
   ).toBeTruthy();
 });

@@ -60,36 +60,58 @@ export function describeFetchFailure(err: unknown): string {
 }
 
 /**
+ * What one poll attempt learned. Recorded rather than reduced to flags so the
+ * message can report the most recent observation: thirty early 500s followed by
+ * thirty proxy envelopes should describe the proxy, which is the condition that
+ * is still true.
+ */
+type PollObservation =
+  | { kind: "reached" }
+  | { kind: "http"; status: number }
+  | { kind: "no-jobs" }
+  | { kind: "unreadable" }
+  | { kind: "unreachable" };
+
+/** Statuses a reverse proxy returns for a backend it could not use. */
+const GATEWAY_STATUSES = [502, 503, 504];
+
+/**
  * What to say when the wait runs out, given only what was actually observed.
  *
- * Four different things look identical from the button: the job is genuinely
- * slow, the app's own endpoint is erroring, something in front of the app is
- * answering instead, or nothing is answering at all. Each sends the reader
- * somewhere different, so the one that was seen is the one reported. An
- * endpoint that was reached at least once takes precedence: whatever else
- * happened, the job really may still be running.
+ * Several different things look identical from the button: the job is slow, the
+ * app's own endpoint is erroring, something in front of the app is answering
+ * instead, a reply arrived that could not be read, or nothing answered at all.
+ * Each sends the reader somewhere different.
+ *
+ * The one rule that is not "report the last thing seen": an endpoint reached at
+ * least once wins outright, because whatever happened afterwards, the job
+ * really may still be running.
+ *
+ * Nothing here infers provenance from a status code. A 502 is what a proxy
+ * returns for a backend it could not reach, so blaming the app for one would be
+ * the same guess this panel refuses to make about a body that parses.
  */
-function waitingMessage({
-  reachedJobsEndpoint,
-  lastErrorStatus,
-  sawNonJobsReply,
-  everAnswered,
-}: {
-  reachedJobsEndpoint: boolean;
-  lastErrorStatus: number | null;
-  sawNonJobsReply: boolean;
-  everAnswered: boolean;
-}): string {
+function waitingMessage(
+  reachedJobsEndpoint: boolean,
+  last: PollObservation | null,
+): string {
   const reload = "reload the page to see where it got to";
+  const inFront = "check what is in front of the app";
+
   if (reachedJobsEndpoint) return `Still running — ${reload}.`;
-  if (lastErrorStatus !== null) {
-    return `The jobs endpoint kept answering HTTP ${lastErrorStatus} — ${reload}.`;
+
+  switch (last?.kind) {
+    case "http":
+      return GATEWAY_STATUSES.includes(last.status)
+        ? `Got HTTP ${last.status} while waiting — ${inFront}.`
+        : `The jobs endpoint answered HTTP ${last.status} — ${reload}.`;
+    case "no-jobs":
+      return `Something answered while waiting, but not the jobs endpoint — ${inFront}.`;
+    case "unreadable":
+      return `Something answered while waiting but the reply could not be read — ${inFront}.`;
+    default:
+      return `Nothing answered while waiting — ${reload}.`;
   }
-  if (sawNonJobsReply) {
-    return "Something answered while waiting, but not the jobs endpoint — check what is in front of the app.";
-  }
-  if (everAnswered) return `Still running — ${reload}.`;
-  return `Nothing answered while waiting — ${reload}.`;
 }
 
 /**
@@ -461,23 +483,12 @@ export function MonthNotesPanel({
    * success would tell the user an insight was written when it was not.
    */
   async function waitForInsightsJob(): Promise<JobOutcome> {
-    // Whether anything ever answered, so the message at the end can tell
-    // "the job is taking a while" apart from "nothing replied for two
-    // minutes" — the second being what a container restart looks like, which
-    // is exactly when a job is likely to have been in flight.
-    let everAnswered = false;
-
-    // Narrower: something answered *and* it was this endpoint. A proxy serving
-    // its own envelope for two minutes satisfies the first and not the second,
-    // and telling the reader the job is still running would be a claim about
-    // something nothing ever looked at.
+    // What the last attempt learned, and whether any attempt ever got as far
+    // as reading the job. Between them these say which of the several
+    // identical-looking failures actually happened, so the message at the end
+    // can point at it rather than guess.
+    let last: PollObservation | null = null;
     let reachedJobsEndpoint = false;
-
-    // The two ways of answering without being usable, kept apart because they
-    // send the reader to different places: the app's own endpoint erroring is
-    // not the same problem as something in front of it replying instead.
-    let lastErrorStatus: number | null = null;
-    let sawNonJobsReply = false;
 
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -493,19 +504,18 @@ export function MonthNotesPanel({
       let jobs: JobsReply["jobs"];
       try {
         const res = await request("/api/admin/jobs");
-        // A resolved request is the evidence that something answered. Whether
-        // its body parses is a separate question, and a jobs endpoint
-        // returning 500 for two minutes is a server that replied sixty times.
-        everAnswered = true;
         if (res.status === 401) {
           return { state: "failed", message: "Session expired — sign in again." };
         }
         if (!res.ok) {
-          lastErrorStatus = res.status;
+          last = { kind: "http", status: res.status };
           continue;
         }
         ({ jobs } = await readJson<JobsReply>(res));
       } catch (err) {
+        // A reply that could not be read is not the same observation as no
+        // reply at all, and they send the reader to different places.
+        last = err instanceof UnreadableReply ? { kind: "unreadable" } : { kind: "unreachable" };
         // The only failure path that does not reach describeFetchFailure, so
         // it has to log for itself. A wait that ran two minutes and learned
         // nothing is the one most worth leaving a trace of.
@@ -519,10 +529,11 @@ export function MonthNotesPanel({
         // is logged for the same reason the catch above is: otherwise this is
         // a silent two-minute wait with an empty console.
         console.error("The jobs endpoint answered without a jobs object.");
-        sawNonJobsReply = true;
+        last = { kind: "no-jobs" };
         continue;
       }
       reachedJobsEndpoint = true;
+      last = { kind: "reached" };
 
       const job = jobs.insights;
       if (job?.state === "failed") {
@@ -538,12 +549,7 @@ export function MonthNotesPanel({
     // so this belongs in the status line rather than the red box.
     return {
       state: "timeout",
-      message: waitingMessage({
-        reachedJobsEndpoint,
-        lastErrorStatus,
-        sawNonJobsReply,
-        everAnswered,
-      }),
+      message: waitingMessage(reachedJobsEndpoint, last),
     };
   }
 
