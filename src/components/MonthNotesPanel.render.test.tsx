@@ -1,5 +1,5 @@
 import { test, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, act } from "@testing-library/react";
 import { MonthNotesPanel } from "./MonthNotesPanel";
 
 /**
@@ -31,7 +31,9 @@ afterEach(() => {
 
 async function renderPanel() {
   render(<MonthNotesPanel months={["2026-09"]} currentMonth="2026-09" />);
-  await screen.findByText(NOTE.note);
+  // The initial load resolves on microtasks, so no clock has to move for it.
+  await act(async () => {});
+  expect(screen.getByText(NOTE.note)).toBeTruthy();
 }
 
 test("a notes fetch that rejects outright still puts something on screen", async () => {
@@ -50,7 +52,10 @@ test("a notes fetch that rejects outright still puts something on screen", async
 });
 
 test("a failed job reports why, even when the reload fails too", async () => {
-  vi.useFakeTimers({ shouldAdvanceTime: true });
+  // Explicit clock rather than shouldAdvanceTime: the poll waits two seconds
+  // between attempts, and advancing it by hand makes that instant and exact
+  // instead of two real seconds against a five-second test budget.
+  vi.useFakeTimers();
 
   let notesCalls = 0;
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -73,10 +78,60 @@ test("a failed job reports why, even when the reload fails too", async () => {
     screen.getByRole("button", { name: "Regenerate now" }).click();
   });
 
-  await waitFor(
-    () => {
-      expect(screen.getByText("Regeneration failed: no API key")).toBeTruthy();
-    },
-    { timeout: 10000 },
+  // One poll interval is enough: the job reports "failed" on the first look.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+
+  expect(screen.getByText("Regeneration failed: no API key")).toBeTruthy();
+});
+
+test("a reply that arrives but cannot be read is not reported as unreachable", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    })),
   );
+
+  render(<MonthNotesPanel months={["2026-09"]} currentMonth="2026-09" />);
+
+  // The server answered — a proxy error page, a truncated stream. Saying it
+  // could not be reached would claim more than we know.
+  await screen.findByText("The server's reply could not be read.");
+});
+
+test("a save that cannot reach the server says so rather than doing nothing", async () => {
+  let notesCalls = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      notesCalls += 1;
+      if (init?.method === "POST") throw new TypeError("Failed to fetch");
+      if (notesCalls === 1) return jsonResponse(PAYLOAD);
+      return jsonResponse(PAYLOAD);
+    }),
+  );
+
+  await renderPanel();
+
+  const textarea = screen.getByRole("textbox") as HTMLTextAreaElement;
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      "value",
+    )!.set!;
+    setter.call(textarea, "Water heater died");
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await act(async () => {
+    screen.getByRole("button", { name: "Save note" }).click();
+  });
+
+  expect(screen.getByText("Could not reach the server.")).toBeTruthy();
 });

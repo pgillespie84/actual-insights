@@ -4,6 +4,30 @@ import { useCallback, useEffect, useState } from "react";
 import { MAX_NOTE_LENGTH, monthsCovered, nextMonthKey } from "@/lib/monthNoteShape.cjs";
 
 /**
+ * Reads a JSON body, marking a parse failure as its own kind of problem.
+ *
+ * A 200 with a truncated or non-JSON body — a proxy error page, a stream cut
+ * short — means the server was reached and answered, so reporting it as
+ * unreachable would be wrong. The rest of this panel is careful to claim only
+ * what it can evidence; this keeps that true of its error messages too.
+ */
+class UnreadableReply extends Error {}
+
+async function readJson<T>(res: Response): Promise<T> {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    throw new UnreadableReply();
+  }
+}
+
+function describeFetchFailure(err: unknown): string {
+  return err instanceof UnreadableReply
+    ? "The server's reply could not be read."
+    : "Could not reach the server.";
+}
+
+/**
  * What waiting on the insights job can tell us.
  *
  * "ran" carries no message on purpose: the script exiting zero says nothing
@@ -204,12 +228,12 @@ export function MonthNotesPanel({
         setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
         return null;
       }
-      const data = (await res.json()) as NotesPayload;
+      const data = await readJson<NotesPayload>(res);
       setNotes(data.notes);
       setInsights(data.insights);
       return data;
-    } catch {
-      setError("Could not reach the server.");
+    } catch (err) {
+      setError(describeFetchFailure(err));
       return null;
     }
   }, []);
@@ -235,6 +259,8 @@ export function MonthNotesPanel({
       setText("");
       setMonthEnd("");
       await load();
+    } catch (err) {
+      setError(describeFetchFailure(err));
     } finally {
       setBusy(false);
     }
@@ -255,6 +281,7 @@ export function MonthNotesPanel({
         setError(`HTTP ${res.status}`);
         return;
       }
+
       // The stored insights that quoted this note still contain whatever it
       // explained, and the note is no longer in the list to say so. Merged
       // rather than replaced, so deleting a second note does not drop the
@@ -264,6 +291,8 @@ export function MonthNotesPanel({
         setOrphaned((prev) => [...new Set([...prev, ...quoting])].sort());
       }
       await load();
+    } catch (err) {
+      setError(describeFetchFailure(err));
     } finally {
       setBusy(false);
     }
@@ -338,6 +367,9 @@ export function MonthNotesPanel({
 
       setStatus("Insight regenerated.");
       setOrphaned((months) => months.filter((m) => m !== month));
+    } catch (err) {
+      setStatus(null);
+      setError(describeFetchFailure(err));
     } finally {
       setBusy(false);
     }
@@ -353,14 +385,24 @@ export function MonthNotesPanel({
   async function waitForInsightsJob(): Promise<JobOutcome> {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
-      const res = await fetch("/api/admin/jobs");
-      if (res.status === 401) {
-        return { state: "failed", message: "Session expired — sign in again." };
+
+      // A dropped connection partway through a two-minute poll is not evidence
+      // about the job, so it is worth another go round. Running out of
+      // iterations is already reported honestly as a timeout.
+      let jobs: Record<string, { state: string; message: string | null }>;
+      try {
+        const res = await fetch("/api/admin/jobs");
+        if (res.status === 401) {
+          return { state: "failed", message: "Session expired — sign in again." };
+        }
+        if (!res.ok) continue;
+        ({ jobs } = await readJson<{
+          jobs: Record<string, { state: string; message: string | null }>;
+        }>(res));
+      } catch {
+        continue;
       }
-      if (!res.ok) continue;
-      const { jobs } = (await res.json()) as {
-        jobs: Record<string, { state: string; message: string | null }>;
-      };
+
       const job = jobs.insights;
       if (job?.state === "failed") {
         return { state: "failed", message: `Regeneration failed: ${job.message ?? "no message"}` };
