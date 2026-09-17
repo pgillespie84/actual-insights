@@ -65,7 +65,7 @@ export function describeFetchFailure(err: unknown): string {
  * thirty proxy envelopes should describe the proxy, which is the condition that
  * is still true.
  */
-export type PollObservation =
+type PollObservation =
   | { kind: "reached" }
   | { kind: "http"; status: number }
   | { kind: "no-jobs" }
@@ -109,7 +109,13 @@ type RealPollKind<K extends PollObservation["kind"]> = K;
  * last attempt got no answer. Before that: Still running", which claims the
  * job may be running while nothing established it.
  */
-export type AnsweredObservation = Extract<PollObservation, { kind: RealPollKind<AnsweredKind> }>;
+// The RealPollKind<...> wrapper is the typo guard described above, not a
+// redundant identity: unwrapping it back to a bare AnsweredKind removes the
+// check without failing anything.
+export type AnsweredObservation = Extract<
+  PollObservation,
+  { kind: RealPollKind<AnsweredKind> }
+>;
 
 /** Statuses a reverse proxy returns for a backend it could not use. */
 const GATEWAY_STATUSES = [502, 503, 504];
@@ -555,10 +561,10 @@ export function MonthNotesPanel({
     let last: PollObservation | null = null;
     let reachedJobsEndpoint = false;
 
-    // The most recent observation where something replied. Only an
-    // observation of this kind entitles
-    // the ending to speak about the wait rather than about the attempt it
-    // finished on, and it keeps the earlier evidence around so a final dropped
+    // The most recent observation that can stand as the answer — see
+    // AnsweredObservation. Only an observation of this kind entitles the
+    // ending to speak about the wait rather than about the attempt it finished
+    // on, and it keeps the earlier evidence around so a final dropped
     // connection cannot erase it.
     //
     // Reaching the job is a reply and is still deliberately not recorded here;

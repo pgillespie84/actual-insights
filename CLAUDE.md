@@ -16,6 +16,8 @@ Financial dashboard that syncs data from a self-hosted Actual Budget instance in
 npm run dev          # Next.js dev server (localhost:3000)
 npm run build        # Production build
 npm run lint         # ESLint
+npm run typecheck    # tsc --noEmit. Some guarantees in the code are compile-time only
+                     # (see MonthNotesPanel) — vitest strips types, so it cannot catch them
 npx prisma generate  # Regenerate Prisma client after schema changes
 npx prisma migrate dev --name <name>  # Create new migration
 npx prisma migrate deploy             # Apply migrations

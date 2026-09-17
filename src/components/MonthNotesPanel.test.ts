@@ -5,7 +5,6 @@ import {
   describeFetchFailure,
   waitingMessage,
   type AnsweredObservation,
-  type PollObservation,
 } from "./MonthNotesPanel";
 
 const NOW = "2026-09-16T12:00:00.000Z";
@@ -207,7 +206,11 @@ test("an observation from outside the type system fails loudly instead of render
   // Returning undefined here would set the status line to an empty string —
   // the silent no-op this panel exists to remove.
   expect(() =>
-    waitingMessage(false, { kind: "from-the-future" } as unknown as PollObservation, null),
+    waitingMessage(
+      false,
+      { kind: "from-the-future" } as unknown as Parameters<typeof waitingMessage>[1],
+      null,
+    ),
   ).toThrow(/Unhandled poll observation/);
 });
 
@@ -224,7 +227,8 @@ test("the type refuses to remember a non-answer as the answer", () => {
   //
   // That alone would let the signature widen without failing anything, since
   // these say nothing about it, so the line below ties the two together: if
-  // the parameter stops being the narrow type, this stops compiling.
+  // the parameter widens, this stops compiling. One-directional on purpose —
+  // narrowing it is already caught by the recursive call in waitingMessage.
   type ParamStaysNarrow = Parameters<typeof waitingMessage>[2] extends
     | AnsweredObservation
     | null
