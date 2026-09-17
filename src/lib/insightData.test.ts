@@ -108,9 +108,14 @@ test("category and account names travel as parameters, never as query text", asy
   const withoutList = pool.calls.filter(
     (c) => !c.values.some((v) => Array.isArray(v) && v.some((n) => names.includes(n as string))),
   );
-  // The income query is the one that filters on no name list at all: it selects
-  // on c."isIncome" alone. Everything else must carry its list as an array.
-  expect(withoutList.map((c) => c.text.includes("total_income"))).toEqual([true]);
+  // Two queries legitimately filter on no name list. The income query selects
+  // on c."isIncome" alone, and the month-notes query does not touch categories
+  // at all. Everything else must carry its list as an array.
+  expect(
+    withoutList.map((c) =>
+      c.text.includes("total_income") ? "income" : c.text.includes("MonthNote") ? "notes" : c.text,
+    ),
+  ).toEqual(["income", "notes"]);
 });
 
 // A name with an apostrophe used to need escaping before it could be spliced
@@ -182,4 +187,29 @@ test("a completed month carries no in-progress fields", async () => {
   expect(data.projectedSpent).toBeUndefined();
   expect(data.atRiskCategories).toBeUndefined();
   expect(data.previousMonthSpentSameDay).toBeUndefined();
+});
+
+test("the household's notes for the month travel with the payload", async () => {
+  const pool = fakePool({
+    MonthNote: [
+      { monthStart: "2026-03", monthEnd: null, note: "Redid the front walkway" },
+      { monthStart: "2026-02", monthEnd: "2026-03", note: "Vacation" },
+    ],
+  });
+
+  const data = await gatherMonthData(pool, "2026-03");
+
+  // Tagged so the boundary between the household's words and the prompt's
+  // instructions is structural. A note spanning months says so, so the model
+  // reads one vacation across February and March rather than two. The order is
+  // the fetch's: rows arrive newest first for the LIMIT and are reversed back.
+  expect(data.monthNotes).toEqual([
+    "<household_note>Vacation (spans 2026-02 to 2026-03)</household_note>",
+    "<household_note>Redid the front walkway</household_note>",
+  ]);
+});
+
+test("a month with no notes carries an empty list, not a missing field", async () => {
+  const data = await gatherMonthData(fakePool({}), "2026-03");
+  expect(data.monthNotes).toEqual([]);
 });

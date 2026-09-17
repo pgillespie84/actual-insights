@@ -5,6 +5,7 @@ export interface DashboardConfig {
   HOUSEHOLD_NAMES: string;
   SKIP_CATEGORIES: string[];
   SKIP_INCOME: string[];
+  TOP_CATEGORY_EXCLUSIONS?: string[];
   SKIP_VENDOR_CATEGORIES?: string[];
   BUDGET_BUCKETS: Record<string, string[]>;
   BUSINESS_CATEGORIES: string[];
@@ -35,6 +36,7 @@ export const SKIP_CATEGORIES: string[] = config.SKIP_CATEGORIES;
 
 export const SKIP_INCOME: string[] = config.SKIP_INCOME;
 
+/**
 /**
  * An optional list of names, or an empty one.
  *
@@ -80,6 +82,28 @@ export function optionalNameList(value: unknown): string[] {
  */
 export const SKIP_VENDOR_CATEGORIES: string[] = optionalNameList(
   config.SKIP_VENDOR_CATEGORIES,
+);
+
+/**
+ * Categories kept out of the Top categories widget.
+ *
+ * Sibling of SKIP_VENDOR_CATEGORIES above, and the same argument one widget
+ * over: the mortgage wins that ranking every month by construction, so a slot
+ * spent on it is a slot not spent on something that might change a decision.
+ * Two keys rather than one because the two rankings are separate questions and
+ * a household may well want the mortgage out of one and not the other.
+ *
+ * Deliberately not part of SKIP_CATEGORIES. That list removes a category from
+ * every figure in the app; this one removes it from a single widget. The money
+ * stays in every total, every trend, and everything the AI insight is given —
+ * the model needs the complete picture for its totals to reconcile, and the
+ * exclusions are about where your attention goes, not about what is true.
+ *
+ * Optional and empty when absent, through the same helper and for the same
+ * reason: a config written before this key existed still has to boot.
+ */
+export const TOP_CATEGORY_EXCLUSIONS: string[] = optionalNameList(
+  config.TOP_CATEGORY_EXCLUSIONS,
 );
 
 export const BUDGET_BUCKETS: Record<string, string[]> = config.BUDGET_BUCKETS;

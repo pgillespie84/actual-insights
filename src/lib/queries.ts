@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, SKIP_VENDOR_CATEGORIES, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
+import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, SKIP_VENDOR_CATEGORIES, TOP_CATEGORY_EXCLUSIONS, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
 import { coversEveryName, getBalanceAt, getBalanceDelta } from "./accountSnapshots";
 import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
@@ -8,6 +8,15 @@ import { getCurrentMonthKeyET, getCurrentDayET } from "./timezone";
 import { generateMonthRange, expenseCategoryFilter, mapWithConcurrency, MONTH_QUERY_CONCURRENCY, type MonthEntry } from "./query-utils";
 
 const catFilter = expenseCategoryFilter();
+
+/**
+ * catFilter, minus the categories kept out of the Top categories widget.
+ *
+ * The exclusion is part of the query rather than a filter on the results,
+ * because the caller applies a LIMIT in the database: dropping the mortgage
+ * afterwards would leave four bars in a widget built for five.
+ */
+const topCategoriesFilter = expenseCategoryFilter(TOP_CATEGORY_EXCLUSIONS);
 
 /** One month loop, with a bounded number of months in flight. */
 function mapMonths<T>(
@@ -541,7 +550,7 @@ export async function getTopExpenseCategories(monthDate: Date, limit: number = 5
     by: ["categoryId"],
     where: {
       date: { gte: start, lte: end },
-      category: catFilter,
+      category: topCategoriesFilter,
       categoryId: { not: null },
     },
     _sum: { amount: true },
