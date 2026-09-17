@@ -94,9 +94,11 @@ test("only the newest notes for a month reach the prompt", async () => {
 
   await fetchNotesForMonth(pool, "2026-09");
 
-  expect(calls[0].text).toContain(`LIMIT ${MAX_NOTES_PER_MONTH}`);
+  // Passed as a parameter, not concatenated into the query text.
+  expect(calls[0].values).toEqual(["2026-09", MAX_NOTES_PER_MONTH]);
   // Newest first, so the cap drops the oldest rather than the most recent.
   expect(calls[0].text).toContain(`"createdAt" DESC`);
+  expect(calls[0].text).toContain("LIMIT $2");
 });
 
 test("notes come back in the order they were written, not the order queried", async () => {
@@ -132,7 +134,7 @@ test("fetching a month asks for notes whose range covers it", async () => {
   const notes = await fetchNotesForMonth(pool, "2026-09");
 
   expect(calls).toHaveLength(1);
-  expect(calls[0].values).toEqual(["2026-09"]);
+  expect(calls[0].values).toEqual(["2026-09", MAX_NOTES_PER_MONTH]);
   expect(calls[0].text).toContain("COALESCE");
   // The rows arrive newest first so the LIMIT drops the oldest; the result is
   // reversed back into the order they were written.

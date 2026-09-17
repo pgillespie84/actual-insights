@@ -21,6 +21,13 @@ const MAX_NOTE_LENGTH = 1000;
  */
 const MAX_NOTES_PER_MONTH = 20;
 
+/**
+ * The delimiter the prompt names when it tells the model that everything
+ * inside is the household's own words and never an instruction.
+ */
+const NOTE_TAG_OPEN = "<household_note>";
+const NOTE_TAG_CLOSE = "</household_note>";
+
 /** `YYYY-MM`, the same month key format used everywhere else. */
 const MONTH_KEY = /^\d{4}-(0[1-9]|1[0-2])$/;
 
@@ -114,15 +121,21 @@ function formatNoteForPrompt(note) {
     note.monthEnd && note.monthEnd !== note.monthStart
       ? ` (spans ${note.monthStart} to ${note.monthEnd})`
       : "";
+  // The tag is only a boundary if the text cannot close it. A note containing
+  // the literal closing tag would otherwise end the delimiter early and the
+  // rest would read as prompt text rather than as the household's words.
+  const text = note.note.split(NOTE_TAG_OPEN).join("").split(NOTE_TAG_CLOSE).join("");
   // Wrapped in a tag the prompt names, so the boundary between the household's
   // words and the instructions is structural rather than a matter of the model
   // taking the prompt's word for it. Nothing sanitises the text — the only
   // author and the only reader are the same household — but a note that reads
   // like an instruction should still be visibly data.
-  return `<household_note>${note.note}${span}</household_note>`;
+  return `${NOTE_TAG_OPEN}${text}${span}${NOTE_TAG_CLOSE}`;
 }
 
 module.exports = {
+  NOTE_TAG_OPEN,
+  NOTE_TAG_CLOSE,
   MAX_NOTE_LENGTH,
   MAX_NOTES_PER_MONTH,
   isValidMonthKey,

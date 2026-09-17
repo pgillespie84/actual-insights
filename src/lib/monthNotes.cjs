@@ -37,8 +37,8 @@ async function fetchNotesForMonth(pool, monthKey) {
      FROM "MonthNote"
      WHERE "monthStart" <= $1 AND COALESCE("monthEnd", "monthStart") >= $1
      ORDER BY "createdAt" DESC
-     LIMIT ${MAX_NOTES_PER_MONTH}`,
-    [monthKey],
+     LIMIT $2`,
+    [monthKey, MAX_NOTES_PER_MONTH],
   );
   return result.rows
     .map((r) => ({

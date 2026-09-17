@@ -23,10 +23,51 @@ interface MonthNote {
  * the note as seen while September never received it, which is precisely the
  * "I added a note and nothing happened" mystery this is here to prevent.
  */
-export function staleMonths(note: MonthNote, insights: Record<string, string>): string[] {
-  return (monthsCovered(note) as string[]).filter((month) => {
+export function staleMonths(
+  note: MonthNote,
+  insights: Record<string, string>,
+  currentMonth: string,
+): string[] {
+  return coveredSoFar(note, currentMonth).filter((month) => {
     const insight = insights[month];
     return !insight || insight < note.createdAt;
+  });
+}
+
+/**
+ * The months a note covers that can actually hold an insight yet.
+ *
+ * A note can legitimately run into a future month — a remodel booked through
+ * October, written in September — and Actual Budget hands us budget months
+ * ahead of today, so those months appear in the dropdown. But
+ * `generate-insight.cjs` writes nothing for a month with no spending and
+ * `--backfill` skips future months outright, so a future month can never stop
+ * being stale. Flagging it would leave a warning and a button that do nothing
+ * however many times they are pressed, which is the loop this feature exists
+ * to remove. The note still reaches that month's insight once the month
+ * arrives, because the fetch matches on the range.
+ */
+function coveredSoFar(note: MonthNote, currentMonth: string): string[] {
+  return (monthsCovered(note) as string[]).filter((month) => month <= currentMonth);
+}
+
+/**
+ * The months whose stored insight actually quotes this note.
+ *
+ * Used when a note is deleted: those insights now describe something that is
+ * no longer written down anywhere. A note deleted while still stale was never
+ * in any insight, so there is nothing to redo — and each of these buttons is a
+ * paid Claude call, so offering one that would rewrite an insight identically
+ * is worse than offering nothing.
+ */
+export function monthsQuoting(
+  note: MonthNote,
+  insights: Record<string, string>,
+  currentMonth: string,
+): string[] {
+  return coveredSoFar(note, currentMonth).filter((month) => {
+    const insight = insights[month];
+    return Boolean(insight) && insight >= note.createdAt;
   });
 }
 
@@ -110,9 +151,14 @@ export function MonthNotesPanel({
         setError(`HTTP ${res.status}`);
         return;
       }
-      // The stored insights still contain whatever this note explained, and
-      // the note is no longer in the list to say so. Offer the months back.
-      setOrphaned(monthsCovered(note) as string[]);
+      // The stored insights that quoted this note still contain whatever it
+      // explained, and the note is no longer in the list to say so. Merged
+      // rather than replaced, so deleting a second note does not drop the
+      // first one's months off the banner.
+      const quoting = monthsQuoting(note, insights, currentMonth);
+      if (quoting.length > 0) {
+        setOrphaned((prev) => [...new Set([...prev, ...quoting])].sort());
+      }
       await load();
     } finally {
       setBusy(false);
@@ -144,9 +190,16 @@ export function MonthNotesPanel({
       }
 
       setStatus(`Regenerating ${month}…`);
-      const finishedMessage = await waitForInsightsJob();
-      setStatus(finishedMessage);
-      setOrphaned((months) => months.filter((m) => m !== month));
+      const result = await waitForInsightsJob();
+      // A failure belongs in the red box with the other errors, not in the
+      // muted status line where it reads like progress.
+      if (result.ok) {
+        setStatus(result.message);
+        setOrphaned((months) => months.filter((m) => m !== month));
+      } else {
+        setStatus(null);
+        setError(result.message);
+      }
       await load();
     } finally {
       setBusy(false);
@@ -154,26 +207,34 @@ export function MonthNotesPanel({
   }
 
   /**
-   * Polls the jobs endpoint until the insights job stops running, and returns
-   * what to tell the user. Gives up after a couple of minutes rather than
-   * polling forever if the container restarts mid-job.
+   * Polls the jobs endpoint until the insights job settles.
+   *
+   * Only "success" and "failed" count as settled. "idle" is what the registry
+   * reports after a restart took the job down with it, and calling that
+   * success would tell the user an insight was written when it was not.
    */
-  async function waitForInsightsJob(): Promise<string> {
+  async function waitForInsightsJob(): Promise<
+    { ok: true; message: string } | { ok: false; message: string }
+  > {
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
       const res = await fetch("/api/admin/jobs");
+      if (res.status === 401) {
+        return { ok: false, message: "Session expired — sign in again." };
+      }
       if (!res.ok) continue;
       const { jobs } = (await res.json()) as {
         jobs: Record<string, { state: string; message: string | null }>;
       };
       const job = jobs.insights;
-      if (job && job.state !== "running") {
-        return job.state === "failed"
-          ? `Regeneration failed: ${job.message ?? "no message"}`
-          : "Insight regenerated.";
+      if (job?.state === "failed") {
+        return { ok: false, message: `Regeneration failed: ${job.message ?? "no message"}` };
+      }
+      if (job?.state === "success") {
+        return { ok: true, message: "Insight regenerated." };
       }
     }
-    return "Still running — reload the page to see where it got to.";
+    return { ok: false, message: "Still running — reload the page to see where it got to." };
   }
 
   const button =
@@ -291,7 +352,7 @@ export function MonthNotesPanel({
       ) : (
         <ul className="space-y-3">
           {notes.map((note) => {
-            const stale = staleMonths(note, insights);
+            const stale = staleMonths(note, insights, currentMonth);
             return (
               <li
                 key={note.id}
