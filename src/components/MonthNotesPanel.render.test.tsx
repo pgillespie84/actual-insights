@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, cleanup } from "@testing-library/react";
 import { MonthNotesPanel } from "./MonthNotesPanel";
 
 /**
@@ -48,11 +48,16 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  const warnings = reactWarnings;
+  // Unmount inside the collection window. Testing Library registers its own
+  // cleanup when it is imported, and Vitest runs afterEach hooks in reverse
+  // registration order, so its would otherwise run after console.error has
+  // been restored — and any act warning raised during unmount would go to the
+  // real console unasserted.
+  cleanup();
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
-  expect(warnings).toEqual([]);
+  expect(reactWarnings).toEqual([]);
 });
 
 async function renderPanel() {
@@ -313,5 +318,33 @@ test("two minutes of replies from something that is not the jobs endpoint says t
     screen.getByText(
       "Something answered while waiting, but not the jobs endpoint — check what is in front of the app.",
     ),
+  ).toBeTruthy();
+});
+
+test("an endpoint that keeps erroring is not blamed on whatever is in front of it", async () => {
+  vi.useFakeTimers();
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      return jsonResponse({ error: "boom" }, 500);
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000 * 61);
+  });
+
+  // The app's own endpoint is erroring. Sending the reader to check the proxy
+  // would be pointing at the wrong thing entirely.
+  expect(
+    screen.getByText("The jobs endpoint kept answering HTTP 500 — reload the page to see where it got to."),
   ).toBeTruthy();
 });

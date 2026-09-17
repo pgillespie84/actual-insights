@@ -60,6 +60,39 @@ export function describeFetchFailure(err: unknown): string {
 }
 
 /**
+ * What to say when the wait runs out, given only what was actually observed.
+ *
+ * Four different things look identical from the button: the job is genuinely
+ * slow, the app's own endpoint is erroring, something in front of the app is
+ * answering instead, or nothing is answering at all. Each sends the reader
+ * somewhere different, so the one that was seen is the one reported. An
+ * endpoint that was reached at least once takes precedence: whatever else
+ * happened, the job really may still be running.
+ */
+function waitingMessage({
+  reachedJobsEndpoint,
+  lastErrorStatus,
+  sawNonJobsReply,
+  everAnswered,
+}: {
+  reachedJobsEndpoint: boolean;
+  lastErrorStatus: number | null;
+  sawNonJobsReply: boolean;
+  everAnswered: boolean;
+}): string {
+  const reload = "reload the page to see where it got to";
+  if (reachedJobsEndpoint) return `Still running — ${reload}.`;
+  if (lastErrorStatus !== null) {
+    return `The jobs endpoint kept answering HTTP ${lastErrorStatus} — ${reload}.`;
+  }
+  if (sawNonJobsReply) {
+    return "Something answered while waiting, but not the jobs endpoint — check what is in front of the app.";
+  }
+  if (everAnswered) return `Still running — ${reload}.`;
+  return `Nothing answered while waiting — ${reload}.`;
+}
+
+/**
  * The jobs endpoint's reply, with `jobs` optional on purpose: a 200 that parses
  * is not proof it came from this endpoint.
  */
@@ -440,6 +473,12 @@ export function MonthNotesPanel({
     // something nothing ever looked at.
     let reachedJobsEndpoint = false;
 
+    // The two ways of answering without being usable, kept apart because they
+    // send the reader to different places: the app's own endpoint erroring is
+    // not the same problem as something in front of it replying instead.
+    let lastErrorStatus: number | null = null;
+    let sawNonJobsReply = false;
+
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
 
@@ -461,7 +500,10 @@ export function MonthNotesPanel({
         if (res.status === 401) {
           return { state: "failed", message: "Session expired — sign in again." };
         }
-        if (!res.ok) continue;
+        if (!res.ok) {
+          lastErrorStatus = res.status;
+          continue;
+        }
         ({ jobs } = await readJson<JobsReply>(res));
       } catch (err) {
         // The only failure path that does not reach describeFetchFailure, so
@@ -477,6 +519,7 @@ export function MonthNotesPanel({
         // is logged for the same reason the catch above is: otherwise this is
         // a silent two-minute wait with an empty console.
         console.error("The jobs endpoint answered without a jobs object.");
+        sawNonJobsReply = true;
         continue;
       }
       reachedJobsEndpoint = true;
@@ -495,11 +538,12 @@ export function MonthNotesPanel({
     // so this belongs in the status line rather than the red box.
     return {
       state: "timeout",
-      message: reachedJobsEndpoint
-        ? "Still running — reload the page to see where it got to."
-        : everAnswered
-          ? "Something answered while waiting, but not the jobs endpoint — check what is in front of the app."
-          : "Nothing answered while waiting — reload the page to see where it got to.",
+      message: waitingMessage({
+        reachedJobsEndpoint,
+        lastErrorStatus,
+        sawNonJobsReply,
+        everAnswered,
+      }),
     };
   }
 
