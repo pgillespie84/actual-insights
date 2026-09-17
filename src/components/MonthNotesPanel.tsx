@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MAX_NOTE_LENGTH } from "@/lib/monthNotes.cjs";
+import { MAX_NOTE_LENGTH, monthsCovered } from "@/lib/monthNoteShape.cjs";
 
 interface MonthNote {
   id: string;
@@ -12,15 +12,22 @@ interface MonthNote {
 }
 
 /**
- * Whether the model has seen a note yet.
+ * The months whose insight has not seen this note yet.
  *
- * A note only reaches the insight when that month is regenerated, so a note
- * newer than its month's insight is written down but not yet acted on. Saying
- * so is what stops "I added a note and nothing happened" being a mystery.
+ * A note reaches an insight only when that month is regenerated, so a note
+ * newer than a covered month's insight is written down but not yet acted on.
+ *
+ * Every covered month is checked, not just the start month. A note spanning
+ * August to September feeds both months' insights, so a fresh August insight
+ * says nothing about September — checking only the start month would report
+ * the note as seen while September never received it, which is precisely the
+ * "I added a note and nothing happened" mystery this is here to prevent.
  */
-export function isPending(note: MonthNote, insights: Record<string, string>): boolean {
-  const insight = insights[note.monthStart];
-  return !insight || insight < note.createdAt;
+export function staleMonths(note: MonthNote, insights: Record<string, string>): string[] {
+  return (monthsCovered(note) as string[]).filter((month) => {
+    const insight = insights[month];
+    return !insight || insight < note.createdAt;
+  });
 }
 
 function describeRange(note: MonthNote): string {
@@ -47,6 +54,8 @@ export function MonthNotesPanel({
   const [monthEnd, setMonthEnd] = useState("");
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [orphaned, setOrphaned] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -91,6 +100,7 @@ export function MonthNotesPanel({
     if (!ok) return;
 
     setError(null);
+    setStatus(null);
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/notes?id=${encodeURIComponent(note.id)}`, {
@@ -100,28 +110,70 @@ export function MonthNotesPanel({
         setError(`HTTP ${res.status}`);
         return;
       }
+      // The stored insights still contain whatever this note explained, and
+      // the note is no longer in the list to say so. Offer the months back.
+      setOrphaned(monthsCovered(note) as string[]);
       await load();
     } finally {
       setBusy(false);
     }
   }
 
+  /**
+   * Starts the insights job for one month, then waits for it to settle and
+   * reloads.
+   *
+   * Without the reload the note keeps saying the AI has not seen it long after
+   * it has, which defeats the point of showing the state at all. The job
+   * registry runs one job at a time, so polling its status is how we know the
+   * insight has actually been written.
+   */
   async function regenerate(month: string) {
     setError(null);
-    const res = await fetch("/api/admin/jobs", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job: "insights", month }),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      setError(data.error ?? `HTTP ${res.status}`);
-      return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/admin/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ job: "insights", month }),
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setError(data.error ?? `HTTP ${res.status}`);
+        return;
+      }
+
+      setStatus(`Regenerating ${month}…`);
+      const finishedMessage = await waitForInsightsJob();
+      setStatus(finishedMessage);
+      setOrphaned((months) => months.filter((m) => m !== month));
+      await load();
+    } finally {
+      setBusy(false);
     }
-    setError(null);
-    window.alert(
-      `Regenerating ${month}. It takes a few seconds — the Maintenance section above shows progress.`,
-    );
+  }
+
+  /**
+   * Polls the jobs endpoint until the insights job stops running, and returns
+   * what to tell the user. Gives up after a couple of minutes rather than
+   * polling forever if the container restarts mid-job.
+   */
+  async function waitForInsightsJob(): Promise<string> {
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const res = await fetch("/api/admin/jobs");
+      if (!res.ok) continue;
+      const { jobs } = (await res.json()) as {
+        jobs: Record<string, { state: string; message: string | null }>;
+      };
+      const job = jobs.insights;
+      if (job && job.state !== "running") {
+        return job.state === "failed"
+          ? `Regeneration failed: ${job.message ?? "no message"}`
+          : "Insight regenerated.";
+      }
+    }
+    return "Still running — reload the page to see where it got to.";
   }
 
   const button =
@@ -137,6 +189,38 @@ export function MonthNotesPanel({
         <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </p>
+      )}
+
+      {status && <p className="text-sm text-text-secondary">{status}</p>}
+
+      {orphaned.length > 0 && (
+        <div className="rounded-lg border border-card-border bg-card-bg px-4 py-3 text-sm text-text-secondary">
+          <p>
+            The {orphaned.length === 1 ? "insight" : "insights"} for{" "}
+            {orphaned.join(", ")} still {orphaned.length === 1 ? "quotes" : "quote"} the
+            note you just deleted. Regenerate to write {orphaned.length === 1 ? "it" : "them"}{" "}
+            without it.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {orphaned.map((month) => (
+              <button
+                key={month}
+                className={button}
+                disabled={busy}
+                onClick={() => void regenerate(month)}
+              >
+                Regenerate {month}
+              </button>
+            ))}
+            <button
+              className={button}
+              disabled={busy}
+              onClick={() => setOrphaned([])}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
       )}
 
       <div className="rounded-xl border border-card-border bg-card-bg p-5">
@@ -161,7 +245,14 @@ export function MonthNotesPanel({
               Month
               <select
                 value={monthStart}
-                onChange={(e) => setMonthStart(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setMonthStart(next);
+                  // The "Through" options are filtered to months at or after
+                  // the start, so a stale end month would sit in state with no
+                  // option to show it — a blank select that fails on save.
+                  if (monthEnd && monthEnd < next) setMonthEnd("");
+                }}
                 className={field}
               >
                 {monthOptions.map((m) => (
@@ -200,7 +291,7 @@ export function MonthNotesPanel({
       ) : (
         <ul className="space-y-3">
           {notes.map((note) => {
-            const pending = isPending(note, insights);
+            const stale = staleMonths(note, insights);
             return (
               <li
                 key={note.id}
@@ -212,22 +303,27 @@ export function MonthNotesPanel({
                       {describeRange(note)}
                     </p>
                     <p className="mt-1 text-sm text-text-primary">{note.note}</p>
-                    {pending && (
+                    {stale.length > 0 && (
                       <p className="mt-2 text-sm text-warning-text">
-                        Newer than this month&apos;s insight — the AI has not seen it yet.
+                        {stale.length === 1
+                          ? `The ${stale[0]} insight has not seen this note yet.`
+                          : `The insights for ${stale.join(", ")} have not seen this note yet.`}
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {pending && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* One button per stale month: the job registry runs one at
+                        a time, so firing several at once would just collide. */}
+                    {stale.map((month) => (
                       <button
+                        key={month}
                         className={button}
                         disabled={busy}
-                        onClick={() => void regenerate(note.monthStart)}
+                        onClick={() => void regenerate(month)}
                       >
-                        Regenerate now
+                        {stale.length === 1 ? "Regenerate now" : `Regenerate ${month}`}
                       </button>
-                    )}
+                    ))}
                     <button className={button} disabled={busy} onClick={() => void remove(note)}>
                       Delete
                     </button>

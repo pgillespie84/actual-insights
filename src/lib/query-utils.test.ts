@@ -1,6 +1,6 @@
 import { test, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateMonthRange, expenseCategoryFilter, resolveMonth, mapWithConcurrency } from "./query-utils";
-import { SKIP_CATEGORIES, SKIP_INCOME } from "./constants";
+import { generateMonthRange, expenseCategoryFilter, rankingCategoryFilter, resolveMonth, mapWithConcurrency } from "./query-utils";
+import { SKIP_CATEGORIES, SKIP_INCOME, TOP_CATEGORY_EXCLUSIONS } from "./constants";
 
 beforeEach(() => { vi.useFakeTimers(); });
 afterEach(() => { vi.useRealTimers(); });
@@ -44,6 +44,26 @@ test("expenseCategoryFilter returns skip-list where clause", () => {
     hidden: false,
     name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME] },
   });
+});
+
+// The one function that changes what two dashboard widgets display. The part
+// worth pinning is that it *extends* the skip lists rather than replacing
+// them: dropping them would put rollover and pending-transaction rows back
+// into the rankings.
+test("rankingCategoryFilter adds the top-category exclusions to the skip lists", () => {
+  expect(rankingCategoryFilter()).toEqual({
+    isIncome: false,
+    hidden: false,
+    name: { notIn: [...SKIP_CATEGORIES, ...SKIP_INCOME, ...TOP_CATEGORY_EXCLUSIONS] },
+  });
+});
+
+// Totals, trends and the AI payload all run through expenseCategoryFilter, so
+// an exclusion leaking into it would quietly remove real money from every
+// figure in the app.
+test("the exclusions never leak into the filter the totals use", () => {
+  rankingCategoryFilter();
+  expect(expenseCategoryFilter().name.notIn).toEqual([...SKIP_CATEGORIES, ...SKIP_INCOME]);
 });
 
 // Extracted from three API routes that carried a byte-identical copy. The

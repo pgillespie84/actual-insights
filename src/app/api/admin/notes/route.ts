@@ -14,14 +14,18 @@ import { validateNote, normalizeNote } from "@/lib/monthNotes.cjs";
  * note might be missing, or the insight might just be older than the note.
  */
 async function latestInsightPerMonth(): Promise<Record<string, string>> {
-  const rows = await prisma.dailyInsight.findMany({
-    select: { monthKey: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
+  // Grouped in the database rather than read whole and reduced in JS.
+  // replaceInsight keeps one row per month today, but nothing enforces that,
+  // and this runs on every admin page load.
+  const rows = await prisma.dailyInsight.groupBy({
+    by: ["monthKey"],
+    _max: { createdAt: true },
   });
 
   const latest: Record<string, string> = {};
   for (const row of rows) {
-    if (!(row.monthKey in latest)) latest[row.monthKey] = row.createdAt.toISOString();
+    const at = row._max.createdAt;
+    if (at) latest[row.monthKey] = at.toISOString();
   }
   return latest;
 }

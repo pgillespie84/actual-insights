@@ -199,11 +199,13 @@ test("the household's notes for the month travel with the payload", async () => 
 
   const data = await gatherMonthData(pool, "2026-03");
 
-  // A note spanning months says so, so the model reads one vacation across
-  // February and March rather than two.
+  // Tagged so the boundary between the household's words and the prompt's
+  // instructions is structural. A note spanning months says so, so the model
+  // reads one vacation across February and March rather than two. The order is
+  // the fetch's: rows arrive newest first for the LIMIT and are reversed back.
   expect(data.monthNotes).toEqual([
-    "Redid the front walkway",
-    "Vacation (spans 2026-02 to 2026-03)",
+    "<household_note>Vacation (spans 2026-02 to 2026-03)</household_note>",
+    "<household_note>Redid the front walkway</household_note>",
   ]);
 });
 
