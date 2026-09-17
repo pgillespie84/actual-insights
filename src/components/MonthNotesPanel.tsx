@@ -65,13 +65,28 @@ export function describeFetchFailure(err: unknown): string {
  * thirty proxy envelopes should describe the proxy, which is the condition that
  * is still true.
  */
-type PollObservation =
+export type PollObservation =
   | { kind: "reached" }
   | { kind: "http"; status: number }
   | { kind: "no-jobs" }
   | { kind: "unreadable" }
   | { kind: "unreachable" }
   | { kind: "unexpected" };
+
+/** The kinds that qualify as an answer — see `AnsweredObservation`. */
+type AnsweredKind = "http" | "no-jobs" | "unreadable";
+
+/**
+ * Compile-time check that every kind named above is a real one. `Extract`
+ * matches nothing rather than erroring on a literal that does not exist, so a
+ * typo would otherwise shrink the type in silence.
+ *
+ * Applied inside the definition below rather than as a separate assertion: a
+ * generic constraint reports the valid kinds in the diagnostic, it emits
+ * nothing into the client bundle, and there is no spare alias for a linter to
+ * call unused.
+ */
+type RealPollKind<K extends PollObservation["kind"]> = K;
 
 /**
  * An observation that can stand as "something replied, and here is what".
@@ -87,24 +102,14 @@ type PollObservation =
  * same slip back one step further out; this way a new kind stays out until
  * someone says otherwise.
  *
- * `reached` is deliberately absent even though it is plainly an answer.
- * Nothing needs to remember it — `reachedJobsEndpoint` carries that signal and
- * takes precedence — and admitting it would allow "The last attempt got no
- * answer. Before that: Still running", which claims the job may be running
- * while nothing established it.
+ * `reached` is deliberately absent even though it is plainly an answer, and
+ * not because there is nothing to report about it — `waitingMessage` reports
+ * it as "Still running". It is absent because `reachedJobsEndpoint` already
+ * carries that signal and wins first, and admitting it here would allow "The
+ * last attempt got no answer. Before that: Still running", which claims the
+ * job may be running while nothing established it.
  */
-type AnsweredKind = "http" | "no-jobs" | "unreadable";
-
-/**
- * Compile-time check that every kind named above is a real one. `Extract`
- * matches nothing rather than erroring on a literal that does not exist, so a
- * typo would otherwise shrink the type in silence.
- */
-type AnsweredKindsExist = AnsweredKind extends PollObservation["kind"] ? true : never;
-const _answeredKindsExist: AnsweredKindsExist = true;
-void _answeredKindsExist;
-
-export type AnsweredObservation = Extract<PollObservation, { kind: AnsweredKind }>;
+export type AnsweredObservation = Extract<PollObservation, { kind: RealPollKind<AnsweredKind> }>;
 
 /** Statuses a reverse proxy returns for a backend it could not use. */
 const GATEWAY_STATUSES = [502, 503, 504];
@@ -550,8 +555,8 @@ export function MonthNotesPanel({
     let last: PollObservation | null = null;
     let reachedJobsEndpoint = false;
 
-    // The most recent observation where something replied *and* there is
-    // something to report about it. Only an observation of this kind entitles
+    // The most recent observation where something replied. Only an
+    // observation of this kind entitles
     // the ending to speak about the wait rather than about the attempt it
     // finished on, and it keeps the earlier evidence around so a final dropped
     // connection cannot erase it.

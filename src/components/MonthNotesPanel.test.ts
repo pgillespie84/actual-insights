@@ -5,6 +5,7 @@ import {
   describeFetchFailure,
   waitingMessage,
   type AnsweredObservation,
+  type PollObservation,
 } from "./MonthNotesPanel";
 
 const NOW = "2026-09-16T12:00:00.000Z";
@@ -206,9 +207,7 @@ test("an observation from outside the type system fails loudly instead of render
   // Returning undefined here would set the status line to an empty string —
   // the silent no-op this panel exists to remove.
   expect(() =>
-    waitingMessage(false, { kind: "from-the-future" } as unknown as Parameters<
-      typeof waitingMessage
-    >[1], null),
+    waitingMessage(false, { kind: "from-the-future" } as unknown as PollObservation, null),
   ).toThrow(/Unhandled poll observation/);
 });
 
@@ -222,6 +221,17 @@ test("the type refuses to remember a non-answer as the answer", () => {
   // site, a change to the function's arity or its other parameters would put
   // an error on these lines for an unrelated reason and keep the directives
   // "used" while the guarantee went unchecked.
+  //
+  // That alone would let the signature widen without failing anything, since
+  // these say nothing about it, so the line below ties the two together: if
+  // the parameter stops being the narrow type, this stops compiling.
+  type ParamStaysNarrow = Parameters<typeof waitingMessage>[2] extends
+    | AnsweredObservation
+    | null
+    ? true
+    : never;
+  const paramStaysNarrow: ParamStaysNarrow = true;
+  void paramStaysNarrow;
 
   // @ts-expect-error a dropped connection is not an answer
   const dropped: AnsweredObservation = { kind: "unreachable" };
