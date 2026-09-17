@@ -6,11 +6,15 @@ name: Checks
 # still show a green check, which is worse than having no check at all, because
 # the green one reads as "the tests passed".
 #
-# Separate from build.yml on purpose. This answers "is the code right" in under
-# a minute; that one answers "does the image still build", takes minutes, and
-# fails for reasons this cannot see (the standalone copy layout, the native
-# better-sqlite3 build). Two questions, two answers, and the fast one does not
-# wait behind the slow one.
+# Separate from build.yml on purpose. This answers "is the code right"; that one
+# answers "does the image still build" and fails for reasons this cannot see
+# (the standalone copy layout, the native better-sqlite3 build). Two questions,
+# two answers, and neither waits behind the other.
+#
+# The three checks take about half a minute between them. `npm ci` takes twice
+# that again and dominates the run, so do not read the total as the cost of
+# testing — it is mostly install, and it is the price of a job that starts from
+# a clean tree.
 on:
   push:
     branches: [main]
