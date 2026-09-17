@@ -24,10 +24,24 @@ function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body } as Response;
 }
 
-// These suites drive failure paths on purpose, and the panel logs every one.
-// Silenced so a passing run is quiet and a real failure still stands out.
+/**
+ * The panel logs every failure it reports, and these suites drive failure paths
+ * on purpose, so a passing run would otherwise be a wall of stacks.
+ *
+ * React reports its own problems through the same channel, though, and this
+ * file is built out of act() and fake timers — exactly where an "update was not
+ * wrapped in act" warning is worth seeing. So React's warnings are re-raised as
+ * failures rather than swallowed with the rest.
+ */
+let logged: ReturnType<typeof vi.spyOn>;
+
 beforeEach(() => {
-  vi.spyOn(console, "error").mockImplementation(() => {});
+  logged = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    const first = String(args[0] ?? "");
+    if (first.includes("not wrapped in act") || first.includes("Warning:")) {
+      throw new Error(first);
+    }
+  });
 });
 
 afterEach(() => {
@@ -184,8 +198,10 @@ test("a blip mid-poll costs one attempt, not the whole wait", async () => {
   await act(async () => {
     await vi.advanceTimersByTimeAsync(2000);
   });
-  // The blip alone must not end the wait or report anything yet.
+  // The blip alone must not end the wait or report anything yet — but it is
+  // the one failure path that reports itself, so it has to leave a trace.
   expect(screen.queryByText(/Regeneration failed/)).toBeNull();
+  expect(logged).toHaveBeenCalled();
 
   await act(async () => {
     await vi.advanceTimersByTimeAsync(2000);
@@ -253,4 +269,35 @@ test("a reply that parses but carries no jobs costs an attempt, not the wait", a
 
   // Reaching this at all means the malformed reply did not end the wait.
   expect(screen.getByText("Regeneration failed: no API key")).toBeTruthy();
+});
+
+test("a parsed reply that is not from the jobs endpoint leaves a trace", async () => {
+  vi.useFakeTimers();
+
+  let jobLooks = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      jobLooks += 1;
+      if (jobLooks === 1) return jsonResponse({ error: "bad gateway" });
+      return jsonResponse({
+        jobs: { insights: { state: "failed", message: "no API key" } },
+      });
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+
+  // Nothing threw, so without an explicit log this would be a silent wait with
+  // an empty console — the gap the poll's catch was given a log to close.
+  expect(logged).toHaveBeenCalledWith("The jobs endpoint answered without a jobs object.");
 });

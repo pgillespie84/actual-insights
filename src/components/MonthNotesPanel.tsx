@@ -60,6 +60,14 @@ export function describeFetchFailure(err: unknown): string {
 }
 
 /**
+ * The jobs endpoint's reply, with `jobs` optional on purpose: a 200 that parses
+ * is not proof it came from this endpoint.
+ */
+interface JobsReply {
+  jobs?: Record<string, { state: string; message: string | null }>;
+}
+
+/**
  * What waiting on the insights job can tell us.
  *
  * "ran" carries no message on purpose: the script exiting zero says nothing
@@ -427,7 +435,12 @@ export function MonthNotesPanel({
       // A dropped connection partway through a two-minute poll is not evidence
       // about the job, so it is worth another go round. Running out of
       // iterations is already reported honestly as a timeout.
-      let jobs: Record<string, { state: string; message: string | null }> | undefined;
+      // `jobs` is optional in the parsed type rather than only on this
+      // declaration, so the compiler requires the check below instead of
+      // narrowing it away on the assignment. A body that parses but is not
+      // this endpoint's is a real possibility, and a type that denies it would
+      // let a tidy-up delete the guard as redundant.
+      let jobs: JobsReply["jobs"];
       try {
         const res = await request("/api/admin/jobs");
         // A resolved request is the evidence that something answered. Whether
@@ -438,9 +451,7 @@ export function MonthNotesPanel({
           return { state: "failed", message: "Session expired — sign in again." };
         }
         if (!res.ok) continue;
-        ({ jobs } = await readJson<{
-          jobs: Record<string, { state: string; message: string | null }>;
-        }>(res));
+        ({ jobs } = await readJson<JobsReply>(res));
       } catch (err) {
         // The only failure path that does not reach describeFetchFailure, so
         // it has to log for itself. A wait that ran two minutes and learned
@@ -449,9 +460,16 @@ export function MonthNotesPanel({
         continue;
       }
 
-      // Outside the try, a reply that parsed but carries no jobs would end the
-      // wait rather than costing an attempt like every other non-answer.
-      const job = jobs?.insights;
+      if (!jobs) {
+        // Parsed, but not from this endpoint — a proxy answering 200 with its
+        // own envelope. It costs an attempt like any other non-answer, and it
+        // is logged for the same reason the catch above is: otherwise this is
+        // a silent two-minute wait with an empty console.
+        console.error("The jobs endpoint answered without a jobs object.");
+        continue;
+      }
+
+      const job = jobs.insights;
       if (job?.state === "failed") {
         return { state: "failed", message: `Regeneration failed: ${job.message ?? "no message"}` };
       }
