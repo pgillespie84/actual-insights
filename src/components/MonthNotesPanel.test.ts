@@ -210,3 +210,23 @@ test("an observation from outside the type system fails loudly instead of render
     >[1], null),
   ).toThrow(/Unhandled poll observation/);
 });
+
+test("the type refuses to remember a non-answer as the answer", () => {
+  // Not a runtime assertion — the point is that these lines do not compile.
+  // tsconfig includes this file, so `tsc --noEmit` enforces it, and if
+  // AnsweredObservation ever widens to admit them the unused @ts-expect-error
+  // becomes the failure.
+
+  // @ts-expect-error a dropped connection is not an answer
+  waitingMessage(false, { kind: "unreachable" }, { kind: "unreachable" });
+
+  // @ts-expect-error a throw from elsewhere establishes nothing about the server
+  waitingMessage(false, { kind: "unreachable" }, { kind: "unexpected" });
+
+  // @ts-expect-error reaching the job is carried by reachedJobsEndpoint, not remembered here
+  waitingMessage(false, { kind: "unreachable" }, { kind: "reached" });
+
+  expect(waitingMessage(false, { kind: "unreachable" }, { kind: "no-jobs" })).toContain(
+    "Before that:",
+  );
+});

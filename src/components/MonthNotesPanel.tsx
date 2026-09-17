@@ -74,15 +74,29 @@ type PollObservation =
   | { kind: "unexpected" };
 
 /**
- * An observation that means something replied.
+ * An observation that can stand as "something replied, and here is what".
  *
- * Kept as a type rather than a flag beside each observation, so the two cannot
- * drift apart. Without it, recording a dropped connection as an answer is a
- * one-character slip that compiles and renders "The last attempt got no
- * answer. Before that: Nothing answered while waiting" — a sentence that
- * contradicts its own second clause.
+ * A type rather than a flag beside each observation, so the two cannot drift
+ * apart: recording a dropped connection as the remembered answer would
+ * otherwise be a one-character slip that compiles and renders "The last
+ * attempt got no answer. Before that: Nothing answered while waiting" — a
+ * sentence contradicting its own second clause.
+ *
+ * Listed by inclusion, not by subtracting the exceptions. A subtractive
+ * definition makes every kind added later an answer by default, which puts the
+ * same slip back one step further out; this way a new kind stays out until
+ * someone says otherwise.
+ *
+ * `reached` is deliberately absent even though it is plainly an answer.
+ * Nothing needs to remember it — `reachedJobsEndpoint` carries that signal and
+ * takes precedence — and admitting it would allow "The last attempt got no
+ * answer. Before that: Still running", which claims the job may be running
+ * while nothing established it.
  */
-type AnsweredObservation = Exclude<PollObservation, { kind: "unreachable" | "unexpected" }>;
+type AnsweredObservation = Extract<
+  PollObservation,
+  { kind: "http" | "no-jobs" | "unreadable" }
+>;
 
 /** Statuses a reverse proxy returns for a backend it could not use. */
 const GATEWAY_STATUSES = [502, 503, 504];
@@ -595,7 +609,7 @@ export function MonthNotesPanel({
         continue;
       }
       reachedJobsEndpoint = true;
-      last = lastAnswer = { kind: "reached" };
+      last = { kind: "reached" };
 
       const job = jobs.insights;
       if (job?.state === "failed") {
