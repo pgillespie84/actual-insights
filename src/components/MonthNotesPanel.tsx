@@ -16,15 +16,27 @@ class UnreadableReply extends Error {}
 async function readJson<T>(res: Response): Promise<T> {
   try {
     return (await res.json()) as T;
-  } catch {
-    throw new UnreadableReply();
+  } catch (err) {
+    // Keeping the cause is the whole difference between a message the reader
+    // can act on and one they cannot: the console then says whether this was a
+    // proxy's HTML error page or a stream cut short.
+    throw new UnreadableReply("The server's reply could not be read.", { cause: err });
   }
 }
 
+/**
+ * What to tell the reader about a throw, claiming only what the error supports.
+ *
+ * A failed fetch rejects with a TypeError, so that is the one case where
+ * "could not reach the server" is evidence rather than a guess. These try
+ * blocks cover more than their fetch, and a bug in the surrounding logic
+ * surfacing as a confident claim about the network would send the reader
+ * looking in the wrong place entirely.
+ */
 function describeFetchFailure(err: unknown): string {
-  return err instanceof UnreadableReply
-    ? "The server's reply could not be read."
-    : "Could not reach the server.";
+  if (err instanceof UnreadableReply) return "The server's reply could not be read.";
+  if (err instanceof TypeError) return "Could not reach the server.";
+  return "Something went wrong — there may be more in the browser console.";
 }
 
 /**
@@ -383,6 +395,12 @@ export function MonthNotesPanel({
    * success would tell the user an insight was written when it was not.
    */
   async function waitForInsightsJob(): Promise<JobOutcome> {
+    // Whether anything ever answered, so the message at the end can tell
+    // "the job is taking a while" apart from "nothing replied for two
+    // minutes" — the second being what a container restart looks like, which
+    // is exactly when a job is likely to have been in flight.
+    let everAnswered = false;
+
     for (let i = 0; i < 60; i++) {
       await new Promise((r) => setTimeout(r, 2000));
 
@@ -399,6 +417,7 @@ export function MonthNotesPanel({
         ({ jobs } = await readJson<{
           jobs: Record<string, { state: string; message: string | null }>;
         }>(res));
+        everAnswered = true;
       } catch {
         continue;
       }
@@ -417,7 +436,9 @@ export function MonthNotesPanel({
     // so this belongs in the status line rather than the red box.
     return {
       state: "timeout",
-      message: "Still running — reload the page to see where it got to.",
+      message: everAnswered
+        ? "Still running — reload the page to see where it got to."
+        : "Nothing answered while waiting — reload the page to see where it got to.",
     };
   }
 

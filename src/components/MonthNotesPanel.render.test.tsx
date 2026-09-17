@@ -106,13 +106,10 @@ test("a reply that arrives but cannot be read is not reported as unreachable", a
 });
 
 test("a save that cannot reach the server says so rather than doing nothing", async () => {
-  let notesCalls = 0;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string, init?: RequestInit) => {
-      notesCalls += 1;
+    vi.fn(async (_url: string, init?: RequestInit) => {
       if (init?.method === "POST") throw new TypeError("Failed to fetch");
-      if (notesCalls === 1) return jsonResponse(PAYLOAD);
       return jsonResponse(PAYLOAD);
     }),
   );
@@ -134,4 +131,84 @@ test("a save that cannot reach the server says so rather than doing nothing", as
   });
 
   expect(screen.getByText("Could not reach the server.")).toBeTruthy();
+});
+
+test("a delete that cannot reach the server says so", async () => {
+  vi.stubGlobal("confirm", () => true);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") throw new TypeError("Failed to fetch");
+      return jsonResponse(PAYLOAD);
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Delete" }).click();
+  });
+
+  expect(screen.getByText("Could not reach the server.")).toBeTruthy();
+});
+
+test("a blip mid-poll costs one attempt, not the whole wait", async () => {
+  vi.useFakeTimers();
+
+  let jobLooks = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      jobLooks += 1;
+      // The connection drops on the first look and recovers on the second.
+      if (jobLooks === 1) throw new TypeError("Failed to fetch");
+      return jsonResponse({
+        jobs: { insights: { state: "failed", message: "no API key" } },
+      });
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  // The blip alone must not end the wait or report anything yet.
+  expect(screen.queryByText(/Regeneration failed/)).toBeNull();
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000);
+  });
+  expect(screen.getByText("Regeneration failed: no API key")).toBeTruthy();
+});
+
+test("a wait where nothing ever answered does not claim the job is still running", async () => {
+  vi.useFakeTimers();
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("/api/admin/notes")) return jsonResponse(PAYLOAD);
+      if (init?.method === "POST") return jsonResponse({ started: "insights" });
+      throw new TypeError("Failed to fetch");
+    }),
+  );
+
+  await renderPanel();
+  await act(async () => {
+    screen.getByRole("button", { name: "Regenerate now" }).click();
+  });
+
+  // Sixty attempts, two seconds apart, none of them answered.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(2000 * 61);
+  });
+
+  expect(
+    screen.getByText("Nothing answered while waiting — reload the page to see where it got to."),
+  ).toBeTruthy();
 });
