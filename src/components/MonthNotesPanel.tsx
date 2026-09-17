@@ -78,19 +78,58 @@ const COMPARISON_MONTHS = 3;
  * pressed. The note still reaches that month once it arrives.
  */
 function influencedMonths(note: MonthNote, currentMonth: string): string[] {
-  const covered = (monthsCovered(note) as string[]).filter((m) => m <= currentMonth);
+  const covered = coveredSoFar(note, currentMonth);
   if (covered.length === 0) return [];
 
   const last = covered[covered.length - 1];
   if (currentMonth <= last) return covered;
 
   // Within the comparison window, so the in-progress insight carries it.
-  let edge = last;
+  return windowAfter(last).includes(currentMonth) ? [...covered, currentMonth] : covered;
+}
+
+/**
+ * Every month whose stored insight might still contain a note, including ones
+ * that were in progress when they were written.
+ *
+ * Wider than `influencedMonths` on purpose, and the asymmetry is the point.
+ * That one decides whether to claim a note has not landed yet, where being
+ * wrong means offering a regenerate that cannot help and then reporting the
+ * note as seen. This one decides whether to offer to rewrite an insight after
+ * its note was deleted, where being wrong costs a redundant Claude call the
+ * user chose to spend, and being silent leaves an insight quoting something
+ * that no longer exists anywhere.
+ *
+ * The case it catches: an August note is picked up by September's in-progress
+ * insight. Normally October's run replaces that with a completed recap, which
+ * has no comparison months and so drops the note. But if that never happened —
+ * generation off for a month, no API key, the container down at the rollover —
+ * September's stored row is still the in-progress text quoting the note.
+ */
+function possiblyQuotingMonths(note: MonthNote, currentMonth: string): string[] {
+  const covered = coveredSoFar(note, currentMonth);
+  if (covered.length === 0) return [];
+
+  const later = windowAfter(covered[covered.length - 1]).filter(
+    (m) => m <= currentMonth && !covered.includes(m),
+  );
+  return [...covered, ...later];
+}
+
+/** The note's own months, up to the current one. */
+function coveredSoFar(note: MonthNote, currentMonth: string): string[] {
+  return (monthsCovered(note) as string[]).filter((m) => m <= currentMonth);
+}
+
+/** The COMPARISON_MONTHS months following the given one. */
+function windowAfter(month: string): string[] {
+  const months: string[] = [];
+  let next = month;
   for (let i = 0; i < COMPARISON_MONTHS; i++) {
-    edge = nextMonthKey(edge) as string;
-    if (edge === currentMonth) return [...covered, currentMonth];
+    next = nextMonthKey(next) as string;
+    months.push(next);
   }
-  return covered;
+  return months;
 }
 
 /**
@@ -114,7 +153,7 @@ export function monthsQuoting(
   insights: Record<string, string>,
   currentMonth: string,
 ): string[] {
-  return influencedMonths(note, currentMonth).filter((month) => {
+  return possiblyQuotingMonths(note, currentMonth).filter((month) => {
     const insight = insights[month];
     return Boolean(insight) && insight >= note.createdAt;
   });
@@ -252,8 +291,11 @@ export function MonthNotesPanel({
       // muted status line where it reads like progress.
       if (result.state === "failed") {
         setStatus(null);
-        setError(result.message);
+        // The reload runs first and the job's reason is set after it, so a
+        // reload that also fails cannot bury why the regeneration failed.
+        // A 401 makes both fail, and "sign in again" is the useful half.
         await load();
+        setError(result.message);
         return;
       }
 

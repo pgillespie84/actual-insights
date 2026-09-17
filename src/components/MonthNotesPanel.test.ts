@@ -106,3 +106,33 @@ test("deleting a note offers the in-progress insight that carried it too", () =>
     "2026-09",
   ]);
 });
+
+test("the window is measured from the note's last month, not its first", () => {
+  // October is the last covered month, so the in-progress insight still
+  // carries this note in December — two months later, not five.
+  expect(staleMonths(spanning, {}, "2026-12")).toEqual([
+    "2026-08",
+    "2026-09",
+    "2026-10",
+    "2026-12",
+  ]);
+});
+
+test("a note with no insight anywhere is stale in its own month", () => {
+  expect(staleMonths(august, {}, CURRENT)).toEqual(["2026-08", "2026-09"]);
+});
+
+test("deleting a note offers months whose insight may still quote it, wider than stale", () => {
+  // The asymmetry is deliberate. A September insight that was never replaced
+  // by its completed recap still holds the August note, and missing it leaves
+  // an insight quoting something that no longer exists. Being wrong here costs
+  // a redundant call the user chose to make; being wrong in staleMonths
+  // reports a note as seen when it is not.
+  const insights = { "2026-08": AFTER, "2026-09": AFTER, "2026-11": AFTER };
+  expect(monthsQuoting(august, insights, "2026-11")).toEqual([
+    "2026-08",
+    "2026-09",
+    "2026-11",
+  ]);
+  expect(staleMonths(august, insights, "2026-11")).toEqual([]);
+});
