@@ -8,7 +8,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { formatCents } from "@/lib/format";
+import { formatCents, formatAxisDollars, formatTickLabel } from "@/lib/format";
 
 interface PayeeData {
   payee: string;
@@ -34,9 +34,7 @@ export function TopPayeesChart({ data }: { data: PayeeData[] }) {
           >
             <XAxis
               type="number"
-              tickFormatter={(v) =>
-                v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`
-              }
+              tickFormatter={formatAxisDollars}
               stroke="var(--text-muted)"
               fontSize={12}
             />
@@ -47,6 +45,8 @@ export function TopPayeesChart({ data }: { data: PayeeData[] }) {
               stroke="var(--text-muted)"
               fontSize={12}
               tick={{ fill: "var(--text-secondary)" }}
+              interval={0}
+              tickFormatter={(name: string) => formatTickLabel(name, 18)}
             />
             <Tooltip
               contentStyle={{

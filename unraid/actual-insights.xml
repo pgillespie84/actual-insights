@@ -1,22 +1,22 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>actual-dashboard</Name>
+  <Name>actual-insights</Name>
   <Repository>ghcr.io/pgillespie84/actual-insights:latest</Repository>
   <Registry>https://github.com/pgillespie84/actual-insights</Registry>
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <Overview>Financial dashboard syncing data from Actual Budget into PostgreSQL, with AI-generated insights and PDF email reports.</Overview>
-  <Icon>https://raw.githubusercontent.com/pgillespie84/actual-insights/main/public/favicon.ico</Icon>
+  <Icon>https://raw.githubusercontent.com/pgillespie84/actual-insights/main/public/icon.png</Icon>
 
   <Config Name="Web UI Port" Target="3000" Default="3100" Mode="tcp" Description="Port to access the dashboard." Type="Port" Display="always" Required="true" Mask="false">3100</Config>
 
-  <Config Name="Appdata Path" Target="/data" Default="/mnt/user/appdata/actual-dashboard" Mode="rw" Description="Host path for the Actual Budget sync cache, and where the household config file goes if you use the file option below. Change the left side only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/actual-dashboard</Config>
+  <Config Name="Appdata Path" Target="/data" Default="/mnt/user/appdata/actual-insights" Mode="rw" Description="Host path for the Actual Budget sync cache, and where the household config file goes if you use the file option below. Change the left side only." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/actual-insights</Config>
 
   <Config Name="Household Config (JSON)" Target="DASHBOARD_CONFIG_JSON" Default="" Mode="" Description="Your household config as one line of JSON — account names, category skip lists, net worth groups. Use this OR the file path below. Leave both empty and the dashboard silently runs on placeholder names, so every filter and net worth group matches nothing real. See config/dashboard.example.json for the shape." Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="Household Config (file path)" Target="DASHBOARD_CONFIG" Default="" Mode="" Description="Alternative to the JSON above: path inside the container to your config file. Put the file in the Appdata Path above and set this to /data/config.json." Type="Variable" Display="always" Required="false" Mask="false"></Config>
 
-  <Config Name="Database URL" Target="DATABASE_URL" Default="postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard" Mode="" Description="PostgreSQL connection string. Use the actual-dashboard-db container name as the host. Masked because it carries the database password." Type="Variable" Display="always" Required="true" Mask="true">postgresql://postgres:postgres@actual-dashboard-db:5432/actual_dashboard</Config>
+  <Config Name="Database URL" Target="DATABASE_URL" Default="postgresql://postgres:postgres@actual-insights-db:5432/actual_dashboard" Mode="" Description="PostgreSQL connection string. Use the actual-insights-db container name as the host. Masked because it carries the database password." Type="Variable" Display="always" Required="true" Mask="true">postgresql://postgres:postgres@actual-insights-db:5432/actual_dashboard</Config>
 
   <Config Name="Actual Budget Server URL" Target="ACTUAL_SERVER_URL" Default="" Mode="" Description="URL of your self-hosted Actual Budget server, e.g. http://YOUR-SERVER-IP:5006" Type="Variable" Display="always" Required="true" Mask="false"></Config>
   <Config Name="Actual Budget Password" Target="ACTUAL_PASSWORD" Default="" Mode="" Description="Password for your Actual Budget server." Type="Variable" Display="always" Required="true" Mask="true"></Config>
@@ -28,9 +28,9 @@
 
   <Config Name="Spotlight Categories" Target="SPOTLIGHT_CATEGORIES" Default="Grocery,Takeout,Subscriptions" Mode="" Description="Exactly 3 comma-separated category names to show as spotlight cards." Type="Variable" Display="always" Required="false" Mask="false">Grocery,Takeout,Subscriptions</Config>
 
-  <Config Name="Browserless URL" Target="BROWSERLESS_URL" Default="http://actual-dashboard-browserless:3000" Mode="" Description="Internal URL of the browserless container for PDF rendering." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-dashboard-browserless:3000</Config>
-  <Config Name="Browserless Token" Target="BROWSERLESS_TOKEN" Default="" Mode="" Description="Shared secret token for the browserless container. Must match the token set on actual-dashboard-browserless." Type="Variable" Display="always" Required="false" Mask="true"></Config>
-  <Config Name="PDF Render Base URL" Target="PDF_RENDER_BASE_URL" Default="http://actual-dashboard:3000" Mode="" Description="URL browserless uses to fetch the dashboard. Use the container name." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-dashboard:3000</Config>
+  <Config Name="Browserless URL" Target="BROWSERLESS_URL" Default="http://actual-insights-browserless:3000" Mode="" Description="Internal URL of the browserless container for PDF rendering." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-insights-browserless:3000</Config>
+  <Config Name="Browserless Token" Target="BROWSERLESS_TOKEN" Default="" Mode="" Description="Shared secret token for the browserless container. Must match the token set on actual-insights-browserless." Type="Variable" Display="always" Required="false" Mask="true"></Config>
+  <Config Name="PDF Render Base URL" Target="PDF_RENDER_BASE_URL" Default="http://actual-insights:3000" Mode="" Description="URL browserless uses to fetch the dashboard. Use the container name." Type="Variable" Display="advanced" Required="false" Mask="false">http://actual-insights:3000</Config>
   <Config Name="PDF Render Auth Token" Target="PDF_RENDER_AUTH_TOKEN" Default="" Mode="" Description="Secret that lets the headless browser read the dashboard without logging in. Required for PDF and email. Use a long random string — anyone holding it can read your dashboard." Type="Variable" Display="always" Required="false" Mask="true"></Config>
 
   <Config Name="Resend API Key" Target="RESEND_API_KEY" Default="" Mode="" Description="Optional. Resend API key for outbound email reports and sync alerts." Type="Variable" Display="always" Required="false" Mask="true"></Config>

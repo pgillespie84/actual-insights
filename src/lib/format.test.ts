@@ -1,9 +1,11 @@
 import { test, expect } from "vitest";
 import {
+  formatAxisDollars,
   formatCents,
   formatDollars,
   formatPercent,
   formatSignedDollars,
+  formatTickLabel,
 } from "./format.ts";
 
 test("formatCents formats positive whole dollar amount", () => {
@@ -68,4 +70,74 @@ test("formatSignedDollars uses a true minus sign, not a hyphen", () => {
 
 test("formatSignedDollars treats zero as positive", () => {
   expect(formatSignedDollars(0)).toBe("+$0");
+});
+
+// The axis on Top vendors read "$0k $0k $1k $1k $2k" over a range topping out
+// near $2,000: every tick under a thousand collapsed to $0k, and two pairs
+// rendered identically, so the axis carried no information at all.
+test("formatAxisDollars keeps sub-thousand ticks in whole dollars", () => {
+  expect(formatAxisDollars(0)).toBe("$0");
+  expect(formatAxisDollars(450)).toBe("$450");
+  expect(formatAxisDollars(999)).toBe("$999");
+});
+
+test("formatAxisDollars distinguishes ticks a flat k-suffix collapsed", () => {
+  expect(formatAxisDollars(1200)).not.toBe(formatAxisDollars(1400));
+  expect(formatAxisDollars(1200)).toBe("$1.2k");
+  expect(formatAxisDollars(1400)).toBe("$1.4k");
+});
+
+test("formatAxisDollars drops a trailing zero on a round thousand", () => {
+  expect(formatAxisDollars(2000)).toBe("$2k");
+  expect(formatAxisDollars(1_400_000)).toBe("$1.4M");
+});
+
+test("formatAxisDollars signs a negative with a true minus", () => {
+  expect(formatAxisDollars(-1500)).toBe("−$1.5k");
+});
+
+// Picking the unit before rounding let a value just under a boundary round
+// across it, so the number and its suffix disagreed: 999,999 printed as
+// "$1000k" when it means $1M, and 999.5 as "$1000" when it means $1k.
+test("formatAxisDollars promotes a value that rounds across a boundary", () => {
+  expect(formatAxisDollars(999_999)).toBe("$1M");
+  expect(formatAxisDollars(999.5)).toBe("$1k");
+});
+
+// Both promotion paths build a fresh template string with the sign in it, which
+// is exactly the kind of thing a later refactor of these branches drops.
+test("formatAxisDollars keeps the sign on a promoted value", () => {
+  expect(formatAxisDollars(-999_999)).toBe("−$1M");
+  expect(formatAxisDollars(-999.5)).toBe("−$1k");
+});
+
+test("formatAxisDollars leaves a value that rounds short of the boundary", () => {
+  expect(formatAxisDollars(999_499)).toBe("$999.5k");
+  expect(formatAxisDollars(999)).toBe("$999");
+});
+
+// M is the last unit on purpose, so this one case is allowed to read as a
+// figure that outgrew its suffix. Asserted rather than left to the doc comment,
+// so that adding a B tier has to be a decision rather than an accident.
+test("formatAxisDollars lets the M tier overflow rather than promoting", () => {
+  expect(formatAxisDollars(999_949_999)).toBe("$999.9M");
+  expect(formatAxisDollars(999_950_000)).toBe("$1000M");
+});
+
+// A wrapped tick label runs into its neighbours' slots, and Recharts responds
+// by hiding them — one long name left four bars unlabelled.
+test("formatTickLabel leaves a short name alone", () => {
+  expect(formatTickLabel("Wegmans")).toBe("Wegmans");
+});
+
+test("formatTickLabel truncates a long name to one line", () => {
+  const label = formatTickLabel("Soma Physical Therapy and Wellness");
+  expect(label).toBe("Soma Physica…");
+  expect(label.length).toBe(13);
+});
+
+test("formatTickLabel takes a wider budget where the axis has one", () => {
+  expect(formatTickLabel("Soma Physical Therapy and Wellness", 18)).toBe(
+    "Soma Physical The…",
+  );
 });

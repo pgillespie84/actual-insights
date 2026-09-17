@@ -27,9 +27,9 @@ Containers are managed individually via Unraid's **Add Container** UI — NOT do
 
 | Container | Template | Notes |
 |---|---|---|
-| `actual-dashboard` | `unraid/actual-dashboard.xml` | Next.js app on port 3100 |
-| `actual-dashboard-db` | Stock Postgres from Community Applications | Not a custom template — install `postgres:16-alpine` from CA |
-| `actual-dashboard-browserless` | `unraid/actual-dashboard-browserless.xml` | Headless Chromium for PDF rendering |
+| `actual-insights` | `unraid/actual-insights.xml` | Next.js app on port 3100 |
+| `actual-insights-db` | Stock Postgres from Community Applications | Not a custom template — install `postgres:16-alpine` from CA |
+| `actual-insights-browserless` | `unraid/actual-insights-browserless.xml` | Headless Chromium for PDF rendering |
 
 To install: Docker → Add Container → paste the raw GitHub URL of the XML file, or copy the XML files to `/boot/config/plugins/dockerMan/templates-user/` on the Unraid host.
 
@@ -37,16 +37,16 @@ All containers must be on the same Docker network so they can reach each other b
 
 **Running scripts on Unraid (exec into the running app container):**
 ```bash
-docker exec -it actual-dashboard node scripts/sync.cjs                          # Sync data from Actual Budget
-docker exec -it actual-dashboard node scripts/backfill-snapshots.cjs            # One-time: backfill account balance history
-docker exec -it actual-dashboard node scripts/generate-insight.cjs --backfill   # Regenerate all AI insights
+docker exec -it actual-insights node scripts/sync.cjs                          # Sync data from Actual Budget
+docker exec -it actual-insights node scripts/backfill-snapshots.cjs            # One-time: backfill account balance history
+docker exec -it actual-insights node scripts/generate-insight.cjs --backfill   # Regenerate all AI insights
 ```
 
 **Viewing logs:**
 ```bash
-docker logs actual-dashboard        # App + scheduler logs
-docker logs actual-dashboard -f     # Follow/tail
-docker logs actual-dashboard --since 1h  # Last hour only
+docker logs actual-insights        # App + scheduler logs
+docker logs actual-insights -f     # Follow/tail
+docker logs actual-insights --since 1h  # Last hour only
 ```
 
 ## Architecture
@@ -55,7 +55,7 @@ docker logs actual-dashboard --since 1h  # Last hour only
 - **`scripts/generate-insight.cjs`** — Gathers month budget/spending data via SQL, sends to Claude API (`claude-sonnet-4-6`), stores result in `DailyInsight` table. Generates for current month (in-progress prompt) and previous month (completed prompt). 24-hour cache per month.
 - **`src/lib/queries.ts`** — All Prisma queries for dashboard data. Queries budgets and transactions separately then combines in JS (avoids JOIN inflation).
 - **`src/lib/loadConfig.cjs`** — Single config loader shared by the Next server code and the CJS scripts. Resolves `$DASHBOARD_CONFIG`, then `config/dashboard.json`, then `config/dashboard.example.json`.
-- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation.
+- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation. `SKIP_VENDOR_CATEGORIES` is the one optional key: it hides categories from the dashboard's Top vendors widget only, and defaults to empty so configs written before it keep booting.
 - **`src/app/(dashboard)/`** — Protected dashboard pages (route group with auth layout).
 - **`src/app/api/`** — API routes for auth, dashboard, analytics, trends.
 
@@ -72,6 +72,8 @@ docker logs actual-dashboard --since 1h  # Last hour only
 ```
 DATABASE_URL              # PostgreSQL connection string
 DASHBOARD_CONFIG          # Path to household config JSON (default: config/dashboard.json, falls back to the example). In the container: /data/config.json
+DASHBOARD_CONFIG_JSON     # The config itself, as one line of JSON. Wins over DASHBOARD_CONFIG, and is how the
+                          # Unraid container is configured — there is no file to edit there.
 ACTUAL_DATA_DIR           # Path where Actual Budget sync data is cached (default: /data in container, set via Appdata Path in Unraid UI)
 ACTUAL_SERVER_URL         # Actual Budget server (e.g. http://YOUR-SERVER-IP:5006)
 ACTUAL_PASSWORD           # Actual Budget password
@@ -84,9 +86,9 @@ ANTHROPIC_API_KEY         # Optional — enables AI insights
 SPOTLIGHT_CATEGORIES      # Exactly 3 comma-separated category names; invalid/unset hides the spotlight column
 
 # PDF rendering (Phase 2)
-BROWSERLESS_URL           # Internal URL of browserless container (default: http://actual-dashboard-browserless:3000)
+BROWSERLESS_URL           # Internal URL of browserless container (default: http://actual-insights-browserless:3000)
 BROWSERLESS_TOKEN         # Shared secret token for browserless container
-PDF_RENDER_BASE_URL       # URL browserless uses to fetch the app (default: http://actual-dashboard:3000)
+PDF_RENDER_BASE_URL       # URL browserless uses to fetch the app (default: http://actual-insights:3000)
 PDF_RENDER_AUTH_TOKEN     # Secret that lets the headless browser bypass site auth — required for PDF/email
 
 # Email (Phase 2)

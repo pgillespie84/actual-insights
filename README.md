@@ -26,13 +26,7 @@ npm run dev
 
 The dev server is on [http://localhost:3000](http://localhost:3000). `npx prisma generate` is not optional on a fresh clone — the generated client is gitignored, and the tests and the build both fail without it.
 
-With Docker, using the supplied compose file:
-
-```bash
-docker compose up -d
-```
-
-On Unraid, install each container from its template in `unraid/` and pull the published image, `ghcr.io/pgillespie84/actual-insights:latest`. `SETUP.md` walks through it step by step, including the registry token.
+In production, install the app and browserless containers from their templates in `unraid/`, and Postgres from Community Applications. The published image is `ghcr.io/pgillespie84/actual-insights:latest`. `SETUP.md` walks through it step by step, including the registry token.
 
 Other commands:
 
@@ -46,9 +40,9 @@ npx prisma migrate deploy   # apply migrations
 The scripts run inside the container:
 
 ```bash
-docker exec -it actual-dashboard node scripts/sync.cjs
-docker exec -it actual-dashboard node scripts/backfill-snapshots.cjs
-docker exec -it actual-dashboard node scripts/generate-insight.cjs --backfill
+docker exec -it actual-insights node scripts/sync.cjs
+docker exec -it actual-insights node scripts/backfill-snapshots.cjs
+docker exec -it actual-insights node scripts/generate-insight.cjs --backfill
 ```
 
 ## Configuration
@@ -63,7 +57,7 @@ cp config/dashboard.example.json config/dashboard.json
 
 Edit `config/dashboard.json` to match your Actual Budget setup. It is gitignored, and it is excluded from the Docker build context as well — it describes your real accounts, so it must not reach a published image. If it is missing, the app falls back to `config/dashboard.example.json` and starts with placeholder names, so a fresh clone boots with no setup at all.
 
-In production, mount it on a volume and point `DASHBOARD_CONFIG` at it (`/data/config.json` in the compose file) so it survives image updates.
+In production, pass it as one line of JSON in `DASHBOARD_CONFIG_JSON`, or mount it on a volume and point `DASHBOARD_CONFIG` at it (`/data/config.json` in the container) so it survives image updates.
 
 ### Required environment variables
 

@@ -111,8 +111,8 @@ export async function sendDashboardEmail(opts: {
   const recipients = opts.recipients ?? parseRecipients();
   const prettyMonth = formatMonth(opts.month);
   await send({
-    subject: `Actual Dashboard — ${prettyMonth}`,
-    text: `Attached is the Actual Dashboard report for ${prettyMonth}.`,
+    subject: `Actual Insights — ${prettyMonth}`,
+    text: `Attached is the Actual Insights report for ${prettyMonth}.`,
     recipients,
     attachments: [
       {
@@ -126,7 +126,7 @@ export async function sendDashboardEmail(opts: {
 export async function sendSyncFailureAlert(error: Error): Promise<void> {
   const recipients = parseRecipients();
   const body = [
-    "The Actual Dashboard sync job failed.",
+    "The Actual Insights sync job failed.",
     "",
     `Error: ${error.message}`,
     "",
@@ -134,7 +134,7 @@ export async function sendSyncFailureAlert(error: Error): Promise<void> {
     error.stack ?? "(no stack trace available)",
   ].join("\n");
   await send({
-    subject: "[Actual Dashboard] Sync failed",
+    subject: "[Actual Insights] Sync failed",
     text: body,
     recipients,
   });
@@ -143,8 +143,8 @@ export async function sendSyncFailureAlert(error: Error): Promise<void> {
 export async function sendSyncRecoveryAlert(): Promise<void> {
   const recipients = parseRecipients();
   await send({
-    subject: "[Actual Dashboard] Sync recovered",
-    text: "The Actual Dashboard sync job succeeded after a prior failure. All clear.",
+    subject: "[Actual Insights] Sync recovered",
+    text: "The Actual Insights sync job succeeded after a prior failure. All clear.",
     recipients,
   });
 }
