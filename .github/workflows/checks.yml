@@ -57,9 +57,11 @@ jobs:
       # Each check runs even when an earlier one failed, so one red run lists
       # everything that is wrong rather than only the first thing. The job
       # still fails if any of them did.
+      # The same script CLAUDE.md points at, so a change to how the project
+      # type-checks reaches CI without anyone remembering to edit this file.
       - name: Type check
         if: ${{ !cancelled() }}
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Lint
         if: ${{ !cancelled() }}
