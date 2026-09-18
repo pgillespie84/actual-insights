@@ -62,6 +62,15 @@ test("no extra skips leaves the filter exactly as it was", () => {
   expect(expenseCategoryFilter([])).toEqual(expenseCategoryFilter());
 });
 
+// Totals, trends and the AI payload all run through the bare filter, so an
+// extra leaking into it would quietly remove real money from every figure in
+// the app. The base lists are spread into a fresh array on each call, and this
+// is what says so.
+test("extra skips never leak into the filter the totals use", () => {
+  expenseCategoryFilter(["Mortgage"]);
+  expect(expenseCategoryFilter().name.notIn).toEqual([...SKIP_CATEGORIES, ...SKIP_INCOME]);
+});
+
 // Extracted from three API routes that carried a byte-identical copy. The
 // fallback is the interesting part: when the current ET month has no data yet
 // (early in a month, before a sync), the newest month that does is used.

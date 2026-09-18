@@ -3,6 +3,7 @@ const {
   getDaysInMonth,
   getPreviousMonthKey,
 } = require("./timezone.cjs");
+const { fetchNotesForMonth, formatNoteForPrompt } = require("./monthNotes.cjs");
 
 const { SKIP_CATEGORIES, SKIP_INCOME, NET_WORTH_GROUPS } = loadConfig();
 
@@ -76,6 +77,7 @@ const SPENT = `COALESCE(ABS(SUM(t.amount)), 0)`;
  * @property {{name: string, group: string, budgeted: string, spent: string, over: string}[]} overspendingCategories
  * @property {{payee: string, category: string, total: string}[]} topPayees
  * @property {{account: string, inflow: string, outflow: string, net: string}[]} savingsFlows
+ * @property {string[]} monthNotes what the household wrote about this month
  * @property {{dayOfMonth: number, daysInMonth: number, percentElapsed: string}} [monthProgress] in-progress months only
  * @property {string} [projectedSpent] in-progress months only
  * @property {string} [previousMonthSpentSameDay] in-progress months only
@@ -191,11 +193,17 @@ async function gatherMonthData(pool, monthKey, dayOfMonth, options = {}) {
     isInProgress
       ? pool.query(netSpendSql("prev_same_day_spent"), [prevStartDate, prevSameDayCutoff, skipNames])
       : Promise.resolve({ rows: [] }),
+
+    // 9: the household's own notes about this month. Every month in the
+    // payload carries its own, including the three comparison months, so the
+    // model does not read last summer's vacation as a spending trend.
+    fetchNotesForMonth(pool, monthKey),
   ];
 
   const [
     budgetResult, spentResult, overspendingResult, payeesResult,
     incomeResult, prevResult, savingsResult, atRiskResult, prevSameDayResult,
+    notes,
   ] = await Promise.all(queries);
 
   const totalBudgeted = Number(budgetResult.rows[0]?.total_budgeted || 0);
@@ -234,6 +242,7 @@ async function gatherMonthData(pool, monthKey, dayOfMonth, options = {}) {
       category: r.category,
       total: (Number(r.total) / 100).toFixed(2),
     })),
+    monthNotes: notes.map(formatNoteForPrompt),
     savingsFlows: savingsResult.rows.map((r) => ({
       account: r.account,
       inflow: (Number(r.inflow) / 100).toFixed(2),

@@ -59,6 +59,7 @@ export interface HealthCheckConfig {
   BUDGET_BUCKETS?: Record<string, string[]>;
   SKIP_CATEGORIES?: string[];
   SKIP_INCOME?: string[];
+  TOP_CATEGORY_EXCLUSIONS?: string[];
   SKIP_VENDOR_CATEGORIES?: string[];
   BUSINESS_CATEGORIES?: string[];
   EXCLUDED_ACCOUNTS?: string[];
@@ -123,10 +124,11 @@ export function checkConfigHealth(
 
   report("SKIP_CATEGORIES", config.SKIP_CATEGORIES ?? [], "unknown-category");
   report("SKIP_INCOME", config.SKIP_INCOME ?? [], "unknown-category");
-  // Worth reporting even though the key is optional: a misspelled category
-  // here hides nothing from Top vendors, and a chart that ignored the setting
-  // looks exactly like a chart the setting did not apply to.
+  // Both are worth reporting even though the keys are optional: a misspelled
+  // category here hides nothing from its widget, and a chart that ignored the
+  // setting looks exactly like a chart the setting did not apply to.
   report("SKIP_VENDOR_CATEGORIES", config.SKIP_VENDOR_CATEGORIES ?? [], "unknown-category");
+  report("TOP_CATEGORY_EXCLUSIONS", config.TOP_CATEGORY_EXCLUSIONS ?? [], "unknown-category");
   report("BUSINESS_CATEGORIES", config.BUSINESS_CATEGORIES ?? [], "unknown-category");
   report("EXCLUDED_ACCOUNTS", config.EXCLUDED_ACCOUNTS ?? [], "unknown-account");
 

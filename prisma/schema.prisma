@@ -79,3 +79,19 @@ model DailyInsight {
 
   @@index([monthKey])
 }
+
+/// A note the household writes about a month, handed to the AI as context.
+///
+/// Free text on purpose. Nothing computes on it and nothing on the dashboard
+/// changes because of it — it exists so the insight can say why a category
+/// jumped, instead of guessing. `monthEnd` is null for the common single-month
+/// note and set when one event spans several months.
+model MonthNote {
+  id         String   @id @default(cuid())
+  createdAt  DateTime @default(now())
+  monthStart String
+  monthEnd   String?
+  note       String
+
+  @@index([monthStart])
+}

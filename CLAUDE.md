@@ -16,6 +16,12 @@ Financial dashboard that syncs data from a self-hosted Actual Budget instance in
 npm run dev          # Next.js dev server (localhost:3000)
 npm run build        # Production build
 npm run lint         # ESLint
+npm run typecheck    # tsc --noEmit. Some guarantees in the code are compile-time only
+                     # (see MonthNotesPanel) — vitest strips types, so it cannot catch them.
+                     # `npm run build` type-checks too, so the PR build enforces these —
+                     # except on fork PRs, which deliberately do not build, so a fork
+                     # branch is only checked once it lands on main. This is the fast
+                     # way to run them without a full build.
 npx prisma generate  # Regenerate Prisma client after schema changes
 npx prisma migrate dev --name <name>  # Create new migration
 npx prisma migrate deploy             # Apply migrations
@@ -55,7 +61,8 @@ docker logs actual-insights --since 1h  # Last hour only
 - **`scripts/generate-insight.cjs`** — Gathers month budget/spending data via SQL, sends to Claude API (`claude-sonnet-4-6`), stores result in `DailyInsight` table. Generates for current month (in-progress prompt) and previous month (completed prompt). 24-hour cache per month.
 - **`src/lib/queries.ts`** — All Prisma queries for dashboard data. Queries budgets and transactions separately then combines in JS (avoids JOIN inflation).
 - **`src/lib/loadConfig.cjs`** — Single config loader shared by the Next server code and the CJS scripts. Resolves `$DASHBOARD_CONFIG`, then `config/dashboard.json`, then `config/dashboard.example.json`.
-- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation. `SKIP_VENDOR_CATEGORIES` is the one optional key: it hides categories from the dashboard's Top vendors widget only, and defaults to empty so configs written before it keep booting.
+- **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation. Two optional keys are the exceptions, each hiding categories from one widget and from nothing else: `SKIP_VENDOR_CATEGORIES` for the dashboard's Top vendors chart and `TOP_CATEGORY_EXCLUSIONS` for Top categories. Neither touches a total, a trend, or the AI payload, and both default to empty so configs written before them keep booting.
+- **`src/lib/monthNotes.cjs`** — Month notes, the free text the household writes about a month on the admin page. Handed to the AI as context in `gatherMonthData`; changes no figure and suppresses no flag.
 - **`src/app/(dashboard)/`** — Protected dashboard pages (route group with auth layout).
 - **`src/app/api/`** — API routes for auth, dashboard, analytics, trends.
 
