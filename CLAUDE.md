@@ -48,6 +48,9 @@ docker exec -it actual-insights node scripts/backfill-snapshots.cjs            #
 docker exec -it actual-insights node scripts/generate-insight.cjs --backfill   # Regenerate all AI insights
 docker exec -it actual-insights node scripts/import-fund-history.cjs /data/funds.csv --dry-run  # Preview a savings fund import
 docker exec -it actual-insights node scripts/import-fund-history.cjs /data/funds.csv            # One-time: import fund history from the spreadsheet
+# The CSV goes in the Appdata Path (/mnt/user/appdata/actual-insights), which the
+# container sees as /data. `config/funds.example.csv` is the format reference;
+# `config/funds.csv` is gitignored for the same reason config/dashboard.json is.
 ```
 
 **Viewing logs:**

@@ -15,5 +15,10 @@ README.md
 # loadConfig.cjs falls back to it.
 config/dashboard.json
 
+# A savings fund export, for the same reason: real balances, and nothing in
+# the image ever needs it. The import reads it from the mounted data
+# directory, not from the build.
+config/funds.csv
+
 # Commit QA reports.
 .qa

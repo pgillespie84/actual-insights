@@ -26,8 +26,11 @@
  *
  * To fix an order, update the timestamps:
  *
- *   UPDATE "SavingsFund" SET "createdAt" = '<a time before the next fund>'
+ *   UPDATE "SavingsFund" SET "createdAt" = '<a UTC time before the next fund>'
  *   WHERE name = '<fund>';
+ *
+ * UTC, because that is the clock both writers here use — see the note on
+ * importedAt below.
  *
  * Deleting the funds and re-importing also works and is worse: balances
  * cascade with the fund, so every month it ever held goes with it, and a
@@ -175,15 +178,23 @@ async function main() {
     // position" rather than a true instant; the column is only ever read for
     // ordering.
     //
-    // The base is the database's CURRENT_TIMESTAMP rather than this process's
-    // clock, and that matters more than it looks. createdAt is TIMESTAMP
-    // *without* time zone, so whatever wall clock is written is stored
-    // verbatim — and a fund added from the admin page takes the column
-    // default, which is CURRENT_TIMESTAMP. Sending an ISO string from node
-    // writes UTC into a column the other writer fills with database-local
-    // time: on a database set to New York, an evening import lands in
-    // tomorrow, and every fund added afterwards from the page sorts ahead of
-    // the whole sheet. Both writers have to mean the same clock.
+    // The base is UTC, because that is what the other writer uses.
+    //
+    // createdAt is TIMESTAMP *without* time zone, so whatever wall clock is
+    // written is stored verbatim, and the two writers have to agree. The
+    // column's DEFAULT is CURRENT_TIMESTAMP — database-local — but the admin
+    // route never reaches it: `createdAt` is `@default(now())`, which Prisma
+    // evaluates itself and sends as a UTC parameter, so the default never
+    // fires.
+    //
+    // Checked rather than reasoned about, because this was got wrong once in
+    // the other direction: against a database set to Europe/Berlin, a fund
+    // added from the admin page nineteen seconds after an import using
+    // CURRENT_TIMESTAMP stored 17:42 against the sheet's 19:42, and sorted
+    // ahead of every fund in it. Verifying on a database west of UTC hides
+    // that, since UTC is then ahead and the order comes out right by luck.
+    const importedAt = Date.now();
+
     for (const [index, fund] of funds.entries()) {
       // The group is deliberately not updated on an existing fund. Once the
       // household has moved a fund on the admin page, re-running the import
@@ -201,14 +212,10 @@ async function main() {
       // — and the dashboard reads group order off createdAt. See importedAt.
       const created = await pool.query(
         `INSERT INTO "SavingsFund" (id, name, "group", "createdAt")
-         VALUES (
-           gen_random_uuid()::text, $1, $2,
-           CURRENT_TIMESTAMP + ($3 || ' milliseconds')::interval
-         ) RETURNING id`,
-        // CURRENT_TIMESTAMP is the transaction's start, identical for every
-        // row here — which is the bug this replaced. The index is what makes
-        // it increase.
-        [fund.name, fund.group, String(index)],
+         VALUES (gen_random_uuid()::text, $1, $2, $3) RETURNING id`,
+        // One base instant plus the row's index: strictly increasing, and it
+        // does not depend on how fast the inserts ran.
+        [fund.name, fund.group, new Date(importedAt + index).toISOString()],
       );
       idByName.set(fund.name, created.rows[0].id);
       createdFunds++;
