@@ -186,6 +186,32 @@ function resolveBalance(balances, monthKey) {
 }
 
 /**
+ * The `count` months ending at `monthKey`, oldest first.
+ *
+ * What the sparkline is drawn from. A fixed window rather than "every month
+ * with a figure": a fund recorded once in January and once in September
+ * should show eight months of flat line and then a step, not two points side
+ * by side, which would read as a fund that moved last month.
+ *
+ * @param {string} monthKey `YYYY-MM`, the newest month in the window
+ * @param {number} count how many months, including that one
+ * @returns {string[]}
+ */
+function monthsEndingAt(monthKey, count) {
+  const months = [];
+  let [year, month] = monthKey.split("-").map(Number);
+  for (let i = 0; i < count; i++) {
+    months.push(`${year}-${String(month).padStart(2, "0")}`);
+    month -= 1;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+  }
+  return months.reverse();
+}
+
+/**
  * Groups in the order they should appear.
  *
  * By the order the groups were first created, which the caller passes in as
@@ -216,5 +242,6 @@ module.exports = {
   validateBalance,
   isFundVisibleIn,
   resolveBalance,
+  monthsEndingAt,
   groupsInOrder,
 };

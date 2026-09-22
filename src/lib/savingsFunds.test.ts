@@ -75,6 +75,15 @@ test("funds are ordered largest balance first within a group", async () => {
   expect(shortTerm.funds.map((f) => f.name)).toEqual(["General Savings", "Car Repair Fund"]);
 });
 
+test("a carried figure claims no change, because nobody looked", async () => {
+  // Subtracting a carried figure from itself is zero, and "+$0" beside "as of
+  // Jun" would read as a fund that held steady rather than one nobody checked.
+  const [shortTerm] = await getFundGroups("2026-09");
+  const carRepair = shortTerm.funds.find((f) => f.name === "Car Repair Fund")!;
+
+  expect(carRepair.change).toBeNull();
+});
+
 test("change is measured against the previous month's figure", async () => {
   const [shortTerm] = await getFundGroups("2026-09");
   const general = shortTerm.funds.find((f) => f.name === "General Savings")!;

@@ -15,9 +15,19 @@ import { prisma } from "./prisma";
 import {
   isFundVisibleIn,
   resolveBalance,
+  monthsEndingAt,
   groupsInOrder,
 } from "./savingsFundShape.cjs";
 import { getPreviousMonthKey } from "./timezone";
+
+/**
+ * How many month-ends the dashboard's sparkline covers.
+ *
+ * A year, so the shape of a fund's year is the thing being shown: the tax
+ * fund's saw, a fund draining steadily. Shorter would make a single large
+ * movement fill the whole line.
+ */
+export const SPARKLINE_MONTHS = 12;
 
 export interface SavingsFundRecord {
   id: string;
@@ -44,6 +54,15 @@ export interface FundRow extends SavingsFundRecord {
    * just appeared has not "held steady", and +$0 would say it had.
    */
   change: number | null;
+  /**
+   * The last `SPARKLINE_MONTHS` month-ends, oldest first, carried forward the
+   * same way the headline figure is.
+   *
+   * A month before this fund's first entry is null rather than zero, so the
+   * line starts where the fund's history does instead of climbing out of a
+   * floor that was never recorded.
+   */
+  history: (number | null)[];
 }
 
 export interface FundGroup {
@@ -91,6 +110,7 @@ export async function listFunds(): Promise<SavingsFundRecord[]> {
  */
 export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
   const previous = getPreviousMonthKey(monthKey);
+  const window: string[] = monthsEndingAt(monthKey, SPARKLINE_MONTHS);
 
   const [funds, balances] = await Promise.all([
     listFunds(),
@@ -116,19 +136,29 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
       .map((fund) => {
         const history = byFund.get(fund.id) ?? [];
         const now = resolveBalance(history, monthKey);
-        // Resolved the same way, so a fund whose September figure is carried
-        // from June compares against June rather than against nothing — the
-        // change then reads as 0, which is the truth about the recorded
-        // figures even when it is not the truth about the money.
         const before = resolveBalance(history, previous);
 
         return {
           ...fund,
+          // Resolved per month rather than read off the rows, so a fund with
+          // one figure in January and one in September draws eleven months of
+          // line rather than two points pretending to be neighbours.
+          history: window.map((month) => {
+            const at = resolveBalance(history, month);
+            return at ? at.balance : null;
+          }),
           balance: now ? now.balance : null,
           asOf: now ? now.asOf : null,
           carried: now ? now.carried : false,
           entered: now ? now.asOf === monthKey : false,
-          change: now && before ? now.balance - before.balance : null,
+          // No change is claimed for a carried figure. Both months resolve to
+          // the same old entry, so the subtraction is a June figure minus
+          // itself: it would render as "+$0" beside "as of Jun", which says
+          // the fund held steady when what actually happened is that nobody
+          // looked. The marker explains the absence; a zero would contradict
+          // it.
+          change:
+            now && before && !now.carried ? now.balance - before.balance : null,
         };
       })
       // Largest balance first, within the group. A fund with no figure at all

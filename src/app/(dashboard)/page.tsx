@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { DailySpendingChart } from "@/components/DailySpendingChart";
 import { TopVendorsChart } from "@/components/TopVendorsChart";
 import { MetricBan } from "@/components/MetricBan";
+import { SavingsFundsWidget } from "@/components/SavingsFundsWidget";
 import { TopExpenseCategoriesWidget } from "@/components/TopExpenseCategoriesWidget";
 import { CategorySpotlightCard } from "@/components/CategorySpotlightCard";
 import { MonthSelector } from "@/components/MonthSelector";
@@ -102,6 +103,17 @@ function DashboardContent() {
           detail={`${formatDollars(income)} in · ${formatDollars(expenses)} out`}
         />
       </div>
+
+      {/*
+        Between the metric row and the spending chart on purpose. The row
+        above answers how this month is going; this answers what the savings
+        are for, which is a different question and does not fit in a box.
+      */}
+      <SavingsFundsWidget
+        groups={data.fundGroups}
+        monthKey={data.monthKey}
+        isPrint={isPrint}
+      />
 
       <DailySpendingChart data={data.dailySpending} />
 
