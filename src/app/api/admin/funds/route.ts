@@ -30,6 +30,12 @@ async function snapGroup(group: string): Promise<string> {
   const existing = await prisma.savingsFund.findMany({
     select: { group: true },
     distinct: ["group"],
+    // Ordered so the winning spelling is the same every time. A database that
+    // already holds "Short Term" and "Short term" — which nothing prevented
+    // before this snapping existed — would otherwise snap to whichever row
+    // Postgres happened to return first, and successive writes could flip
+    // funds between the two.
+    orderBy: { group: "asc" },
   });
   const match = existing.find(
     (row) => row.group.toLowerCase() === group.toLowerCase(),
@@ -170,7 +176,17 @@ export async function PATCH(request: NextRequest) {
   }
 
   const normalized = normalizeFund(merged);
-  const data = { ...normalized, group: await snapGroup(normalized.group) };
+  // Snapped only when the group is actually being set. Passing the fund's
+  // existing group through it would make archiving or renaming a fund quietly
+  // move it — in a database holding both "Short Term" and "Short term", every
+  // unrelated edit would drag funds from one to the other. Normalising
+  // spellings that are already stored is a migration's job, not a side effect
+  // of an archive.
+  const data = {
+    ...normalized,
+    group:
+      body.group === undefined ? current.group : await snapGroup(normalized.group),
+  };
 
   if (data.name.toLowerCase() !== current.name.toLowerCase()) {
     const clash = await findByName(data.name);

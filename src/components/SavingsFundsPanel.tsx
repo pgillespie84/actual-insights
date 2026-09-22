@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MAX_FUND_NAME_LENGTH } from "@/lib/savingsFundShape.cjs";
 import { formatCents } from "@/lib/format";
 import type { FundGroup, FundRow, SavingsFundRecord } from "@/lib/savingsFunds";
@@ -93,6 +93,9 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
 
   const months = useMemo(() => monthOptions(currentMonth), [currentMonth]);
 
+  /** Counts loads so a late reply from an abandoned month cannot land. */
+  const loadToken = useRef(0);
+
   const existingGroups = useMemo(() => {
     const seen: string[] = [];
     for (const fund of funds) if (!seen.includes(fund.group)) seen.push(fund.group);
@@ -120,21 +123,30 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
 
   const load = useCallback(
     async (month: string) => {
+      // Numbered, and only the newest reply is allowed to land. Switching
+      // Sep → Aug → Jul quickly leaves two fetches in flight, and if August's
+      // answer arrives last it sets the grid to August while the picker reads
+      // July — which the shownMonth gate then withholds forever, leaving
+      // "Loading 2026-07…" above a load that actually succeeded.
+      const token = ++loadToken.current;
       setError(null);
-      // Cleared here rather than only on save: "Saved 3 figures for Sep 2026"
-      // sitting above August's grid reads as a claim about August.
-      setStatus(null);
       try {
         const res = await fetch(`/api/admin/funds?month=${encodeURIComponent(month)}`);
         if (!res.ok) {
+          if (token !== loadToken.current) return;
           setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
           return;
         }
         const data = (await res.json()) as FundsReply;
-        // The server says which month it answered for, and that is what the
-        // grid is labelled with — not the month that was asked for.
-        fill({ ...data, monthKey: month });
+        if (token !== loadToken.current) return;
+        // The server's own month, not the one that was asked for. The route
+        // falls back to the current month when it cannot read the parameter,
+        // and taking the request's word for it would label those figures with
+        // a month they do not belong to — the exact thing shownMonth exists
+        // to prevent.
+        fill(data);
       } catch (err) {
+        if (token !== loadToken.current) return;
         console.error(err);
         setError("Could not reach the server.");
       }
@@ -173,13 +185,17 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
         error?: string;
         written?: number;
         cleared?: number;
+        monthKey?: string;
         groups?: FundGroup[];
       };
       if (!res.ok) {
         setError(data.error ?? `HTTP ${res.status}`);
         return;
       }
-      if (data.groups) fill({ monthKey, groups: data.groups, funds });
+      // The month the server says it saved, for the same reason load() takes
+      // the server's word: the grid must be labelled with the month its
+      // figures are actually from.
+      if (data.groups) fill({ monthKey: data.monthKey ?? monthKey, groups: data.groups, funds });
       const saved = data.written ?? 0;
       const cleared = data.cleared ?? 0;
       setStatus(
@@ -301,6 +317,12 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
                 ) {
                   return;
                 }
+                // Cleared here rather than inside load(), which also runs
+                // after adding or archiving a fund — clearing it there wiped
+                // "Added Tax Fund." in the same render that set it, so those
+                // confirmations never appeared at all. A month switch is the
+                // only time a status is genuinely about the wrong month.
+                setStatus(null);
                 setMonthKey(next);
               }}
               className={field}
@@ -326,10 +348,25 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
       </div>
 
       {shownMonth !== monthKey ? (
-        // Withheld rather than shown stale. The error banner above says what
-        // went wrong when a load failed; what must not happen is one month's
-        // figures sitting under another month's label.
-        <p className="text-sm text-text-secondary">Loading {monthKey}…</p>
+        // Withheld rather than shown stale: one month's figures under another
+        // month's label is how a figure gets saved against the wrong month.
+        //
+        // Which of the two states this is matters. "Loading…" sitting under a
+        // red error banner contradicts it and offers no way out but switching
+        // months and back.
+        error !== null ? (
+          <p className="text-sm text-text-secondary">
+            Could not load {monthKey}.{" "}
+            <button
+              className="underline hover:text-text-primary"
+              onClick={() => void load(monthKey)}
+            >
+              Try again
+            </button>
+          </p>
+        ) : (
+          <p className="text-sm text-text-secondary">Loading {monthKey}…</p>
+        )
       ) : groups.length === 0 ? (
         <p className="text-sm text-text-secondary">
           No funds yet. Add one below, or import the spreadsheet with{" "}
@@ -378,6 +415,7 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
             className={`w-64 ${field}`}
           />
           <select
+            aria-label="Group for new fund"
             value={newGroup}
             onChange={(e) => setNewGroup(e.target.value)}
             className={field}
