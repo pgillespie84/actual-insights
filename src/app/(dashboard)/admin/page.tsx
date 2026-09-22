@@ -1,5 +1,6 @@
 import { AdminPanel } from "@/components/AdminPanel";
 import { MonthNotesPanel } from "@/components/MonthNotesPanel";
+import { SavingsFundsPanel } from "@/components/SavingsFundsPanel";
 import { getCurrentMonthKeyET } from "@/lib/timezone";
 import { getAdminHealth } from "@/lib/adminHealth";
 import { getJobStatus, type JobName, type JobStatus } from "@/lib/jobRegistry";
@@ -25,6 +26,7 @@ export default async function AdminPage() {
       </div>
       <AdminPanel health={health} initialJobs={jobs} />
       <MonthNotesPanel months={health.months} currentMonth={getCurrentMonthKeyET()} />
+      <SavingsFundsPanel currentMonth={getCurrentMonthKeyET()} />
     </div>
   );
 }
