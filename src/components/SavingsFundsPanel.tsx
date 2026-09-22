@@ -74,7 +74,16 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [initial, setInitial] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  /**
+   * The month the figures on screen were loaded for.
+   *
+   * Kept separately from the month in the picker, because the two can
+   * disagree: a load that fails leaves the old month's numbers in place while
+   * the picker already reads the new one. Showing that grid would invite the
+   * household to save September's figures against August, so the grid is
+   * withheld until these two agree again.
+   */
+  const [shownMonth, setShownMonth] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
@@ -106,23 +115,28 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
     }
     setValues(next);
     setInitial(next);
+    setShownMonth(data.monthKey);
   }, []);
 
   const load = useCallback(
     async (month: string) => {
       setError(null);
+      // Cleared here rather than only on save: "Saved 3 figures for Sep 2026"
+      // sitting above August's grid reads as a claim about August.
+      setStatus(null);
       try {
         const res = await fetch(`/api/admin/funds?month=${encodeURIComponent(month)}`);
         if (!res.ok) {
           setError(res.status === 401 ? "Session expired — sign in again." : `HTTP ${res.status}`);
           return;
         }
-        fill((await res.json()) as FundsReply);
+        const data = (await res.json()) as FundsReply;
+        // The server says which month it answered for, and that is what the
+        // grid is labelled with — not the month that was asked for.
+        fill({ ...data, monthKey: month });
       } catch (err) {
         console.error(err);
         setError("Could not reach the server.");
-      } finally {
-        setLoaded(true);
       }
     },
     [fill],
@@ -272,8 +286,23 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
           <label className="flex items-center gap-2 text-sm text-text-secondary">
             Month
             <select
+              aria-label="Month"
               value={monthKey}
-              onChange={(e) => setMonthKey(e.target.value)}
+              onChange={(e) => {
+                const next = e.target.value;
+                // Nineteen boxes typed and one mis-click on the picker used to
+                // throw the lot away without a word. Asking is the whole guard:
+                // the figures live only in this form until Save.
+                if (
+                  changed.length > 0 &&
+                  !window.confirm(
+                    `${changed.length} ${changed.length === 1 ? "figure has" : "figures have"} not been saved. Switch months and lose them?`,
+                  )
+                ) {
+                  return;
+                }
+                setMonthKey(next);
+              }}
               className={field}
               disabled={busy}
             >
@@ -284,7 +313,11 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
               ))}
             </select>
           </label>
-          <button className={button} disabled={busy || changed.length === 0} onClick={() => void save()}>
+          <button
+            className={button}
+            disabled={busy || changed.length === 0 || shownMonth !== monthKey}
+            onClick={() => void save()}
+          >
             {changed.length === 0
               ? "Nothing changed"
               : `Save ${changed.length} ${changed.length === 1 ? "change" : "changes"}`}
@@ -292,7 +325,12 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
         </div>
       </div>
 
-      {!loaded ? null : groups.length === 0 ? (
+      {shownMonth !== monthKey ? (
+        // Withheld rather than shown stale. The error banner above says what
+        // went wrong when a load failed; what must not happen is one month's
+        // figures sitting under another month's label.
+        <p className="text-sm text-text-secondary">Loading {monthKey}…</p>
+      ) : groups.length === 0 ? (
         <p className="text-sm text-text-secondary">
           No funds yet. Add one below, or import the spreadsheet with{" "}
           <span className="font-mono text-xs">scripts/import-fund-history.cjs</span>.

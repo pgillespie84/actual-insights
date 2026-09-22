@@ -150,6 +150,38 @@ test("a rejected save says why instead of failing quietly", async () => {
   expect(screen.getByText(/check the number of zeros/)).toBeInTheDocument();
 });
 
+test("switching months with unsaved figures asks first, and stays put on no", async () => {
+  await renderPanel();
+  const confirm = vi.fn().mockReturnValue(false);
+  vi.stubGlobal("confirm", confirm);
+
+  fireEvent.change(screen.getByLabelText("General Savings balance"), {
+    target: { value: "9000" },
+  });
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Month"), { target: { value: "2026-08" } });
+  });
+
+  expect(confirm).toHaveBeenCalled();
+  // The typed figure is still there, and still September's.
+  expect(screen.getByLabelText("General Savings balance")).toHaveValue("9000");
+  expect(screen.getByLabelText("Month")).toHaveValue("2026-09");
+});
+
+test("a failed load withholds the grid rather than labelling old figures with a new month", async () => {
+  await renderPanel();
+  fetchMock.mockResolvedValue(jsonResponse({ error: "nope" }, 500));
+
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Month"), { target: { value: "2026-08" } });
+  });
+
+  // Showing September's pre-fills under an August label is how a figure gets
+  // saved against the wrong month.
+  expect(screen.queryByLabelText("General Savings balance")).not.toBeInTheDocument();
+  expect(screen.getByText("Loading 2026-08…")).toBeInTheDocument();
+});
+
 test("an empty list points at the import rather than looking broken", async () => {
   fetchMock.mockResolvedValue(jsonResponse({ monthKey: "2026-09", groups: [], funds: [] }));
   await renderPanel();

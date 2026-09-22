@@ -5,6 +5,51 @@ import { getFundGroups, listFunds } from "@/lib/savingsFunds";
 import { validateFund, normalizeFund, isValidMonthKey } from "@/lib/savingsFundShape.cjs";
 import { getCurrentMonthKeyET } from "@/lib/timezone";
 
+/** Prisma's code for a unique-constraint violation. */
+const UNIQUE_VIOLATION = "P2002";
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === UNIQUE_VIOLATION
+  );
+}
+
+/**
+ * The stored spelling of a group that already exists, ignoring case.
+ *
+ * The panel tells the household that "Short Term" and "Short term" cannot
+ * become two blocks. The picker alone does not keep that promise — it has a
+ * free-text box for a new group — so the promise is kept here instead, by
+ * snapping a case-insensitive match onto the spelling already in use. A
+ * genuinely new group is returned untouched.
+ */
+async function snapGroup(group: string): Promise<string> {
+  const existing = await prisma.savingsFund.findMany({
+    select: { group: true },
+    distinct: ["group"],
+  });
+  const match = existing.find(
+    (row) => row.group.toLowerCase() === group.toLowerCase(),
+  );
+  return match ? match.group : group;
+}
+
+/**
+ * A fund with this name, ignoring case.
+ *
+ * Postgres unique indexes are case-sensitive, so the database would happily
+ * take "Car Fund" alongside "car fund" — two rows the household would read as
+ * one fund with half its history missing.
+ */
+function findByName(name: string) {
+  return prisma.savingsFund.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+  });
+}
+
 // isAuthenticated(), never hasReadAccess(), for the same reason as the notes
 // route: the PDF renderer's read-only token must not be able to write.
 
@@ -44,21 +89,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: problem }, { status: 400 });
   }
 
-  const data = normalizeFund(body as { name: string; group: string });
+  const normalized = normalizeFund(body as { name: string; group: string });
+  const data = { ...normalized, group: await snapGroup(normalized.group) };
 
-  // The name is unique in the database, so a duplicate is caught there rather
-  // than by a read-then-write that two tabs could both pass. Reported as the
-  // conflict it is, naming the fund, because "already exists" on a list of
-  // nineteen is not enough to find it.
-  const existing = await prisma.savingsFund.findUnique({ where: { name: data.name } });
+  // Checked here for the message — "already exists" on a list of nineteen is
+  // not enough to find the fund, so the name goes in the sentence. The check
+  // is not what makes it safe: two tabs can both pass a read-then-write, so
+  // the unique index is caught below as well, and both paths answer the same
+  // way.
+  const existing = await findByName(data.name);
   if (existing) {
+    return NextResponse.json(
+      { error: `There is already a fund called "${existing.name}".` },
+      { status: 409 },
+    );
+  }
+
+  let created;
+  try {
+    created = await prisma.savingsFund.create({ data });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
     return NextResponse.json(
       { error: `There is already a fund called "${data.name}".` },
       { status: 409 },
     );
   }
-
-  const created = await prisma.savingsFund.create({ data });
 
   return NextResponse.json({
     fund: {
@@ -113,19 +169,29 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: problem }, { status: 400 });
   }
 
-  const data = normalizeFund(merged);
+  const normalized = normalizeFund(merged);
+  const data = { ...normalized, group: await snapGroup(normalized.group) };
 
-  if (data.name !== current.name) {
-    const clash = await prisma.savingsFund.findUnique({ where: { name: data.name } });
+  if (data.name.toLowerCase() !== current.name.toLowerCase()) {
+    const clash = await findByName(data.name);
     if (clash) {
       return NextResponse.json(
-        { error: `There is already a fund called "${data.name}".` },
+        { error: `There is already a fund called "${clash.name}".` },
         { status: 409 },
       );
     }
   }
 
-  const updated = await prisma.savingsFund.update({ where: { id: body.id }, data });
+  let updated;
+  try {
+    updated = await prisma.savingsFund.update({ where: { id: body.id }, data });
+  } catch (err) {
+    if (!isUniqueViolation(err)) throw err;
+    return NextResponse.json(
+      { error: `There is already a fund called "${data.name}".` },
+      { status: 409 },
+    );
+  }
 
   return NextResponse.json({
     fund: {
