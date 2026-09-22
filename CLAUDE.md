@@ -46,6 +46,8 @@ All containers must be on the same Docker network so they can reach each other b
 docker exec -it actual-insights node scripts/sync.cjs                          # Sync data from Actual Budget
 docker exec -it actual-insights node scripts/backfill-snapshots.cjs            # One-time: backfill account balance history
 docker exec -it actual-insights node scripts/generate-insight.cjs --backfill   # Regenerate all AI insights
+docker exec -it actual-insights node scripts/import-fund-history.cjs /data/funds.csv --dry-run  # Preview a savings fund import
+docker exec -it actual-insights node scripts/import-fund-history.cjs /data/funds.csv            # One-time: import fund history from the spreadsheet
 ```
 
 **Viewing logs:**
@@ -62,6 +64,7 @@ docker logs actual-insights --since 1h  # Last hour only
 - **`src/lib/queries.ts`** — All Prisma queries for dashboard data. Queries budgets and transactions separately then combines in JS (avoids JOIN inflation).
 - **`src/lib/loadConfig.cjs`** — Single config loader shared by the Next server code and the CJS scripts. Resolves `$DASHBOARD_CONFIG`, then `config/dashboard.json`, then `config/dashboard.example.json`.
 - **`src/lib/constants.ts`** — Typed re-exports of the loaded config (`SKIP_CATEGORIES`, `SKIP_INCOME`, `NET_WORTH_GROUPS`, `BUDGET_BUCKETS`, `BUSINESS_CATEGORIES`, `EXCLUDED_ACCOUNTS`) used to filter noise from all queries and AI generation. Two optional keys are the exceptions, each hiding categories from one widget and from nothing else: `SKIP_VENDOR_CATEGORIES` for the dashboard's Top vendors chart and `TOP_CATEGORY_EXCLUSIONS` for Top categories. Neither touches a total, a trend, or the AI payload, and both default to empty so configs written before them keep booting.
+- **`src/lib/savingsFunds.ts`** — Savings funds: the household's own ledger of what savings money is earmarked for, one balance per fund per month, all typed in by hand on the admin page. Nothing syncs from Actual, nothing reconciles against a real account balance, and no fund total feeds net worth, the Savings metric or the AI prompt. A month with no entry carries the fund's last known figure forward and the UI says which month it came from. The rules live in `savingsFundShape.cjs`, shared with the import script; `fundImport.cjs` turns the wide spreadsheet export into rows.
 - **`src/lib/monthNotes.cjs`** — Month notes, the free text the household writes about a month on the admin page. Handed to the AI as context in `gatherMonthData`; changes no figure and suppresses no flag.
 - **`src/app/(dashboard)/`** — Protected dashboard pages (route group with auth layout).
 - **`src/app/api/`** — API routes for auth, dashboard, analytics, trends.
