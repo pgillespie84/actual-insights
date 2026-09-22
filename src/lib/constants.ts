@@ -23,9 +23,15 @@ export interface DashboardConfig {
  */
 const source = resolveConfigSource();
 
-export const CONFIG_SOURCE: { path: string | null; isExample: boolean } = {
+export const CONFIG_SOURCE: {
+  path: string | null;
+  isExample: boolean;
+  /** A $DASHBOARD_CONFIG that named a file that is not there. */
+  missingPath: string | null;
+} = {
   path: source.path,
   isExample: source.isExample,
+  missingPath: source.missingPath ?? null,
 };
 
 const config: DashboardConfig = loadConfig({ source });

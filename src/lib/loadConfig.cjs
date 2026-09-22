@@ -28,6 +28,18 @@ const { resolveConfigSource } = require("./configSource.cjs");
 function loadConfig(options = {}) {
   const source = options.source ?? resolveConfigSource(options);
 
+  if (source.missingPath) {
+    // Said first and said separately, because it is a different problem from
+    // "nothing was configured" and needs a different fix. Telling someone who
+    // has already set DASHBOARD_CONFIG to set DASHBOARD_CONFIG sends them to
+    // check the one thing that is not wrong.
+    console.warn(
+      `[config] DASHBOARD_CONFIG is set to ${source.missingPath}, but there is ` +
+        `no file there. In a container this path has to be the path inside the ` +
+        `container — the mount, not the host directory.`
+    );
+  }
+
   if (source.isExample) {
     console.warn(
       `[config] No household config found — falling back to ${source.path}. ` +
