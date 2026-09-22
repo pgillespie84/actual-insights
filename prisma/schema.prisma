@@ -95,3 +95,47 @@ model MonthNote {
 
   @@index([monthStart])
 }
+
+/// A savings fund: money the household has earmarked for one purpose.
+///
+/// Funds live below accounts and Actual knows nothing about them, so every
+/// figure here is typed in by hand on the admin page. Nothing syncs, nothing
+/// reconciles against a real account balance, and no fund total feeds net
+/// worth or the Savings metric — this is a separate ledger the household
+/// keeps, displayed beside the synced figures rather than mixed into them.
+///
+/// `group` is the horizon the household thinks in ("Short Term", "Long
+/// Term"), not where the money sits. It is a plain string so a third group
+/// can be added without a migration; the admin form only offers groups that
+/// already exist, so the free text does not become a typo split.
+model SavingsFund {
+  id           String               @id @default(cuid())
+  name         String               @unique
+  group        String
+  createdAt    DateTime             @default(now())
+  /// The month from which this fund stops appearing, `YYYY-MM`, or null while
+  /// it is live. Recorded as a month rather than a flag so a past month still
+  /// shows the funds that existed then — archiving a fund in September must
+  /// not erase it from March.
+  archivedFrom String?
+  balances     SavingsFundBalance[]
+
+  @@index([group])
+}
+
+/// One month-end balance for one fund, in cents.
+///
+/// Month-end only, keyed by `YYYY-MM`: the household records where a fund
+/// stood, not the day it was checked. A month with no row is not zero — the
+/// fund's last known balance carries forward, and the UI marks a carried
+/// figure with the month it came from. Negative balances are real and stored
+/// as-is; a fund can be overdrawn against its own plan.
+model SavingsFundBalance {
+  fundId   String
+  monthKey String
+  balance  Int
+  fund     SavingsFund @relation(fields: [fundId], references: [id], onDelete: Cascade)
+
+  @@id([fundId, monthKey])
+  @@index([monthKey])
+}
