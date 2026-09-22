@@ -1,0 +1,75 @@
+name: Checks
+
+# The test suite, the linter and the type checker, which nothing on GitHub ran
+# before this. The Docker build type-checks as a side effect of `next build`,
+# but it never ran vitest or eslint — so a branch could turn the suite red and
+# still show a green check, which is worse than having no check at all, because
+# the green one reads as "the tests passed".
+#
+# Separate from build.yml on purpose. This answers "is the code right"; that one
+# answers "does the image still build" and fails for reasons this cannot see
+# (the standalone copy layout, the native better-sqlite3 build). Two questions,
+# two answers, and neither waits behind the other.
+#
+# The three checks take about half a minute between them. `npm ci` takes twice
+# that again and dominates the run, so do not read the total as the cost of
+# testing — it is mostly install, and it is the price of a job that starts from
+# a clean tree.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  checks:
+    # Fork PRs do not run, matching build.yml. `npm ci` executes install scripts
+    # from the PR's own lockfile, so this runs arbitrary code from the branch
+    # just as a Docker build does, and the repo is public. Same guarantee, same
+    # reason: the simplest one is not to run it.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches the Dockerfile, so a version-dependent failure shows up
+          # here rather than only once the image is built.
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # src/generated/prisma is gitignored, and nothing generates it on
+      # install, so every step below fails without this.
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # Each check runs even when an earlier one failed, so one red run lists
+      # everything that is wrong rather than only the first thing. The job
+      # still fails if any of them did.
+      # The same script CLAUDE.md points at, so a change to how the project
+      # type-checks reaches CI without anyone remembering to edit this file.
+      - name: Type check
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Lint
+        if: ${{ !cancelled() }}
+        run: npm run lint
+
+      - name: Test
+        if: ${{ !cancelled() }}
+        # No database and no household config: the suite fakes its query layer,
+        # and loadConfig falls back to config/dashboard.example.json, which is
+        # the tracked placeholder a fresh clone boots on.
+        run: npm test
