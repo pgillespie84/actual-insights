@@ -34,6 +34,9 @@ import type {
   getTopVendors,
   getTrendCategories,
 } from "@/lib/queries";
+// Savings funds live outside queries.ts: every figure there comes from
+// Actual, and every figure here is typed in by hand.
+import type { getFundGroups } from "@/lib/savingsFunds";
 
 /**
  * What a value becomes once it has been through `NextResponse.json`.
@@ -81,6 +84,8 @@ export interface DashboardResponse {
   savingsMetric: Returns<typeof getSavingsMetric>;
   debtMetric: Returns<typeof getDebtMetric>;
   investmentsMetric: Returns<typeof getInvestmentsMetric>;
+  /** Hand-entered savings funds. Feeds no other figure on the page. */
+  fundGroups: Returns<typeof getFundGroups>;
 }
 
 export interface BudgetResponse {
