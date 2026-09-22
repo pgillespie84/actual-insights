@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@actual-app/api": "^26.4.0",
+    "@actual-app/api": "^26.9.0",
     "@anthropic-ai/sdk": "^0.116.0",
     "@prisma/adapter-pg": "^7.6.0",
     "@prisma/client": "^7.6.0",
