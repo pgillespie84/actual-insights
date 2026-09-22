@@ -179,7 +179,60 @@ test("a failed load withholds the grid rather than labelling old figures with a 
   // Showing September's pre-fills under an August label is how a figure gets
   // saved against the wrong month.
   expect(screen.queryByLabelText("General Savings balance")).not.toBeInTheDocument();
-  expect(screen.getByText("Loading 2026-08…")).toBeInTheDocument();
+  // And it says it failed rather than claiming to still be loading, which
+  // would contradict the error banner beside it and offer no way out.
+  expect(screen.queryByText("Loading 2026-08…")).not.toBeInTheDocument();
+  expect(screen.getByText(/Could not load 2026-08/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+});
+
+test("adding a fund says so, and the reload that follows does not wipe it", async () => {
+  await renderPanel();
+  fetchMock.mockClear();
+  fetchMock
+    .mockResolvedValueOnce(jsonResponse({ fund: { id: "z" } }))
+    .mockResolvedValue(jsonResponse(PAYLOAD));
+
+  fireEvent.change(screen.getByPlaceholderText("Car Repair Fund"), {
+    target: { value: "Tax Fund" },
+  });
+  fireEvent.change(screen.getByLabelText("Group for new fund"), {
+    target: { value: "Short Term" },
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+  });
+
+  // Clearing the status inside load() wiped this in the same render that set
+  // it, so adding a fund looked like nothing had happened.
+  expect(screen.getByText("Added Tax Fund.")).toBeInTheDocument();
+});
+
+test("a late reply from an abandoned month cannot take over the grid", async () => {
+  await renderPanel();
+
+  // August answers after July was asked for. Letting it land would set the
+  // grid to August under a July picker, and the grid would then be withheld
+  // indefinitely with nothing to clear it.
+  let releaseAugust: (value: Response) => void = () => {};
+  fetchMock.mockImplementationOnce(
+    () => new Promise<Response>((resolve) => (releaseAugust = resolve)),
+  );
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Month"), { target: { value: "2026-08" } });
+  });
+
+  fetchMock.mockResolvedValue(jsonResponse({ ...PAYLOAD, monthKey: "2026-07" }));
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Month"), { target: { value: "2026-07" } });
+  });
+
+  await act(async () => {
+    releaseAugust(jsonResponse({ ...PAYLOAD, monthKey: "2026-08" }));
+  });
+
+  expect(screen.getByLabelText("General Savings balance")).toBeInTheDocument();
+  expect(screen.queryByText(/Loading 2026-07/)).not.toBeInTheDocument();
 });
 
 test("an empty list points at the import rather than looking broken", async () => {

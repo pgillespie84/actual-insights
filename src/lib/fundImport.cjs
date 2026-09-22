@@ -254,7 +254,7 @@ function buildImport(text, options = {}) {
   // stops at the first month anyone recorded anything in, so a gap earlier in
   // the year is never dropped.
   const ordered = [...monthCols].sort((a, b) => a.monthKey.localeCompare(b.monthKey));
-  const droppedMonths = [];
+  const dropped = new Set();
   for (let i = ordered.length - 1; i >= 0; i--) {
     const col = ordered[i];
     const hasFigure = dataRows.some((row) => {
@@ -262,13 +262,22 @@ function buildImport(text, options = {}) {
       return cents !== null && cents !== 0;
     });
     if (hasFigure) break;
-    // Guarded, because two columns carrying the same month both land here and
-    // the script prints this list for the reader to check. A month named
-    // twice invites them to wonder what they missed.
+    dropped.add(col);
+  }
+
+  // Dropped by column, not by month. Filtering on the month would take a
+  // month's other column with it — so a month carried twice, empty in one
+  // column and filled in the other, would lose the figures and still be
+  // printed under "skipped months with no figures anywhere", which the reader
+  // is being asked to check against the sheet.
+  const keptCols = ordered.filter((col) => !dropped.has(col));
+  const droppedMonths = [];
+  for (const col of ordered) {
+    if (!dropped.has(col)) continue;
+    // A month kept in another column is not a skipped month.
+    if (keptCols.some((kept) => kept.monthKey === col.monthKey)) continue;
     if (!droppedMonths.includes(col.monthKey)) droppedMonths.push(col.monthKey);
   }
-  droppedMonths.reverse();
-  const keptCols = ordered.filter((col) => !droppedMonths.includes(col.monthKey));
 
   // Two columns landing on the same month is quiet otherwise: both write a
   // row, the upsert lets whichever came last win, and the dry run counts the
