@@ -22,14 +22,25 @@ vi.mock("./prisma", () => ({
 
 const { getFundGroups } = await import("./savingsFunds");
 
+// Creation order, which is what fixes the group order — so these stay in
+// this order and anything new goes on the end.
 const FUNDS = [
   { id: "a", name: "General Savings", group: "Short Term", archivedFrom: null },
   { id: "b", name: "Car Repair Fund", group: "Short Term", archivedFrom: null },
   { id: "c", name: "Emergency Fund", group: "Long Term", archivedFrom: null },
   { id: "d", name: "Daycare Tax Fund", group: "Short Term", archivedFrom: "2026-09" },
+  { id: "e", name: "Craft Fund", group: "Long Term", archivedFrom: null },
+  { id: "f", name: "Holiday Fund", group: "Long Term", archivedFrom: null },
+  { id: "g", name: "Unfunded Fund", group: "Long Term", archivedFrom: null },
 ];
 
 const BALANCES = [
+  // Zero all year: opened, never funded beyond a zero entry.
+  { fundId: "e", monthKey: "2026-01", balance: 0 },
+  { fundId: "e", monthKey: "2026-09", balance: 0 },
+  // Spent down to zero in August, which is recent enough to still matter.
+  { fundId: "f", monthKey: "2026-07", balance: 40000 },
+  { fundId: "f", monthKey: "2026-08", balance: 0 },
   { fundId: "a", monthKey: "2026-08", balance: 387866 },
   { fundId: "a", monthKey: "2026-09", balance: 873922 },
   { fundId: "b", monthKey: "2026-06", balance: 309988 },
@@ -44,6 +55,41 @@ beforeEach(() => {
     .mockImplementation(({ where }: { where: { monthKey: { lte: string } } }) =>
       Promise.resolve(BALANCES.filter((b) => b.monthKey <= where.monthKey.lte)),
     );
+});
+
+test("a fund that has held nothing for six months is marked dormant", async () => {
+  const [, longTerm] = await getFundGroups("2026-09");
+  const craft = longTerm.funds.find((f) => f.name === "Craft Fund")!;
+
+  expect(craft.dormant).toBe(true);
+});
+
+test("a fund spent down recently is not dormant, which is when you most want to see it", async () => {
+  // Emptied in August. Hiding it in September is hiding the month the money
+  // went out.
+  const [, longTerm] = await getFundGroups("2026-09");
+  const holiday = longTerm.funds.find((f) => f.name === "Holiday Fund")!;
+
+  expect(holiday.balance).toBe(0);
+  expect(holiday.dormant).toBe(false);
+});
+
+test("a fund emptied long enough ago goes quiet", async () => {
+  // Six months after August, the same fund has stopped being news.
+  const [, longTerm] = await getFundGroups("2027-02");
+  const holiday = longTerm.funds.find((f) => f.name === "Holiday Fund")!;
+
+  expect(holiday.dormant).toBe(true);
+});
+
+test("a fund with no figure ever recorded is not dormant, it is unfilled", async () => {
+  // Null is not zero. This one is waiting for its first entry, which is worth
+  // seeing rather than hiding.
+  const [, longTerm] = await getFundGroups("2026-09");
+  const unfunded = longTerm.funds.find((f) => f.name === "Unfunded Fund")!;
+
+  expect(unfunded.balance).toBeNull();
+  expect(unfunded.dormant).toBe(false);
 });
 
 test("groups come out in the order the funds were created, not alphabetically", async () => {

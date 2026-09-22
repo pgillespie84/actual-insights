@@ -29,6 +29,16 @@ import { getPreviousMonthKey } from "./timezone";
  */
 export const SPARKLINE_MONTHS = 12;
 
+/**
+ * How long a fund has to sit at zero before the dashboard stops listing it.
+ *
+ * Six months. Short enough that funds set up and never funded drop off, long
+ * enough that a fund drained on purpose — a tax fund paid out, a holiday fund
+ * spent — is still on the page through the months you would be asking what
+ * happened to it.
+ */
+export const DORMANT_MONTHS = 6;
+
 export interface SavingsFundRecord {
   id: string;
   name: string;
@@ -54,6 +64,19 @@ export interface FundRow extends SavingsFundRecord {
    * just appeared has not "held steady", and +$0 would say it had.
    */
   change: number | null;
+  /**
+   * Zero now, and nothing but zero for `DORMANT_MONTHS`.
+   *
+   * A fund that exists and is not being used: opened and never funded, or
+   * emptied long enough ago that nobody is still wondering where it went. The
+   * dashboard leaves these out of its list and says how many it left out; the
+   * admin grid shows them regardless, since a dormant fund is exactly the one
+   * you need a box for when it starts being used again.
+   *
+   * Archiving is the other tool and means something different — a fund that
+   * is finished. A dormant fund is expected back.
+   */
+  dormant: boolean;
   /**
    * The last `SPARKLINE_MONTHS` month-ends, oldest first, carried forward the
    * same way the headline figure is.
@@ -111,6 +134,9 @@ export async function listFunds(): Promise<SavingsFundRecord[]> {
 export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
   const previous = getPreviousMonthKey(monthKey);
   const window: string[] = monthsEndingAt(monthKey, SPARKLINE_MONTHS);
+  // The dormancy window is the tail of the sparkline's, so one resolution
+  // pass serves both.
+  const dormantFrom = window.length - DORMANT_MONTHS;
 
   const [funds, balances] = await Promise.all([
     listFunds(),
@@ -134,19 +160,30 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
     const rows: FundRow[] = visible
       .filter((f) => f.group === group)
       .map((fund) => {
-        const history = byFund.get(fund.id) ?? [];
-        const now = resolveBalance(history, monthKey);
-        const before = resolveBalance(history, previous);
+        const balancesFor = byFund.get(fund.id) ?? [];
+        const now = resolveBalance(balancesFor, monthKey);
+        const before = resolveBalance(balancesFor, previous);
+
+        const history = window.map((month) => {
+          const at = resolveBalance(balancesFor, month);
+          return at ? at.balance : null;
+        });
 
         return {
           ...fund,
           // Resolved per month rather than read off the rows, so a fund with
           // one figure in January and one in September draws eleven months of
           // line rather than two points pretending to be neighbours.
-          history: window.map((month) => {
-            const at = resolveBalance(history, month);
-            return at ? at.balance : null;
-          }),
+          history,
+          // A month with no record is not evidence of a balance, so it
+          // neither proves nor breaks dormancy — only a figure above or below
+          // zero does. A fund that has never been given a figure has a null
+          // balance rather than a zero one, so it is never dormant: it is
+          // waiting to be filled in, which is worth seeing.
+          dormant:
+            now !== null &&
+            now.balance === 0 &&
+            history.slice(dormantFrom).every((value) => value === null || value === 0),
           balance: now ? now.balance : null,
           asOf: now ? now.asOf : null,
           carried: now ? now.carried : false,
