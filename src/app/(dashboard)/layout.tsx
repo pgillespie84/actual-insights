@@ -28,7 +28,7 @@ export default function DashboardLayout({
     <>
       {CONFIG_SOURCE.isExample && (
         <Suspense fallback={null}>
-          <PlaceholderConfigBanner />
+          <PlaceholderConfigBanner missingPath={CONFIG_SOURCE.missingPath} />
         </Suspense>
       )}
       <Suspense fallback={null}>
