@@ -166,6 +166,12 @@ describe("buildImport", () => {
     expect(built.warnings.join(" ")).toMatch(/2026-01/);
   });
 
+  it("names a skipped month once, however many columns carried it", () => {
+    // The script prints this list for the reader to check against the sheet.
+    const sheet = ["Account,Jan-26,Nov-26,Nov-26", "Craft Fund,$50.00,$0.00,$0.00"].join("\n");
+    expect(buildImport(sheet, { group: "Long Term" }).droppedMonths).toEqual(["2026-11"]);
+  });
+
   it("files the opening balance against a sheet that does not start in January", () => {
     // "December of the previous year" is only right for a January-to-December
     // sheet. On one running Dec to Nov it would land a year early, and on the
