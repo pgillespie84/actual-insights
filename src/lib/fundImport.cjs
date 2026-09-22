@@ -133,11 +133,23 @@ function isOpeningHeader(header) {
   return OPENING_HEADERS.includes(String(header ?? "").trim().toLowerCase());
 }
 
-/** December of the year before the earliest real month column. */
-function previousDecember(monthKeys) {
-  const years = monthKeys.map((m) => Number(m.slice(0, 4)));
-  if (years.length === 0) return null;
-  return `${Math.min(...years) - 1}-12`;
+/**
+ * The month immediately before the earliest real month column.
+ *
+ * The opening column carries no date of its own, only the sense of "where
+ * this fund stood before the first column". For the household's sheet, which
+ * runs January to December, that is the previous December — but reading the
+ * rule as "December" rather than "the month before" files the opening a whole
+ * year early on any sheet that starts in another month, and on a sheet
+ * running December to November it would also collide with a real column.
+ */
+function monthBeforeEarliest(monthKeys) {
+  if (monthKeys.length === 0) return null;
+  const earliest = monthKeys.reduce((min, m) => (m < min ? m : min));
+  const [year, month] = earliest.split("-").map(Number);
+  return month === 1
+    ? `${year - 1}-12`
+    : `${year}-${String(month - 1).padStart(2, "0")}`;
 }
 
 /**
@@ -224,7 +236,7 @@ function buildImport(text, options = {}) {
     warnings.push("No month columns were recognised — expected headers like Jan-26.");
   }
 
-  const opening = previousDecember(monthCols.map((c) => c.monthKey));
+  const opening = monthBeforeEarliest(monthCols.map((c) => c.monthKey));
   for (const index of openingCols) {
     if (opening) monthCols.push({ index, monthKey: opening });
   }
@@ -255,6 +267,22 @@ function buildImport(text, options = {}) {
   droppedMonths.reverse();
   const keptCols = ordered.filter((col) => !droppedMonths.includes(col.monthKey));
 
+  // Two columns landing on the same month is quiet otherwise: both write a
+  // row, the upsert lets whichever came last win, and the dry run counts the
+  // month twice. It happens for real when a sheet spans December to November
+  // and so carries that December both as "Start of the Year" and as its own
+  // column.
+  const deduped = [];
+  for (const col of keptCols) {
+    if (deduped.some((kept) => kept.monthKey === col.monthKey)) {
+      warnings.push(
+        `Two columns are both ${col.monthKey} — the first one was used and the other ignored.`,
+      );
+      continue;
+    }
+    deduped.push(col);
+  }
+
   const funds = [];
   const balances = [];
   const seen = new Set();
@@ -276,7 +304,7 @@ function buildImport(text, options = {}) {
     seen.add(name.toLowerCase());
     funds.push({ name, group });
 
-    for (const col of keptCols) {
+    for (const col of deduped) {
       const raw = row[col.index];
       if (raw === undefined || String(raw).trim() === "") continue;
       const cents = parseAmountToCents(raw);
@@ -294,6 +322,7 @@ function buildImport(text, options = {}) {
 module.exports = {
   parseDelimited,
   parseMonthHeader,
+  monthBeforeEarliest,
   groupFromRow,
   isTotalRow,
   buildImport,

@@ -111,10 +111,24 @@ test("a past month never shows a later month's figures", async () => {
   expect(general.entered).toBe(true);
 });
 
-test("a month before any fund has history shows no groups at all", async () => {
+test("funds with no figure at all keep a defined order rather than an engine-defined one", async () => {
+  // Both balances null used to subtract two -Infinity sentinels to NaN, which
+  // leaves sort() free to return any order it likes.
+  const groups = await getFundGroups("2025-01");
+  const first = groups[0].funds.map((f) => f.name);
+
+  expect(await getFundGroups("2025-01").then((g) => g[0].funds.map((f) => f.name))).toEqual(
+    first,
+  );
+  expect(first).toHaveLength(3);
+});
+
+test("a month before any fund has history shows no figures rather than zeros", async () => {
   const groups = await getFundGroups("2025-01");
 
-  // Every fund resolves to null rather than zero, so the totals are absent
-  // rather than a confident $0 across the board.
+  // The groups are still there — every fund existed then — but every figure
+  // resolves to null rather than zero, so nothing claims the funds were empty
+  // when the truth is that nobody had recorded anything yet.
+  expect(groups.map((g) => g.group)).toEqual(["Short Term", "Long Term"]);
   expect(groups.every((g) => g.funds.every((f) => f.balance === null))).toBe(true);
 });

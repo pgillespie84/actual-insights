@@ -24,6 +24,9 @@ describe("parseAmountToCents", () => {
     // The dashboard formats negatives with a true minus sign, so a figure
     // copied back off the page has to read as a negative rather than as junk.
     expect(parseAmountToCents("−$1.35")).toBe(-135);
+    // Where the sheet puts the sign is a formatting choice, not a meaning.
+    expect(parseAmountToCents("$-40.00")).toBe(-4000);
+    expect(parseAmountToCents("( $40.00 )")).toBe(-4000);
   });
 
   it("returns null rather than zero for anything it cannot read", () => {

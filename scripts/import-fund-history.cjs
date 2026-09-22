@@ -28,7 +28,7 @@ const { Pool } = require("pg");
 require("dotenv").config({ override: true });
 
 const { buildImport } = require("../src/lib/fundImport.cjs");
-const { validateFund } = require("../src/lib/savingsFundShape.cjs");
+const { validateFund, validateBalance } = require("../src/lib/savingsFundShape.cjs");
 
 function formatCents(cents) {
   return `$${(cents / 100).toFixed(2)}`;
@@ -81,8 +81,31 @@ async function main() {
     process.exit(1);
   }
 
+  // Balances are held to the same ceiling the admin form applies. Without
+  // this a cell with an extra zero reaches Postgres, where anything over
+  // 2,147,483,647 cents overflows an integer column and aborts the run
+  // halfway with a raw driver error instead of the report above.
+  const badBalances = balances
+    .map((b) => ({ b, problem: validateBalance({ monthKey: b.monthKey, balance: b.balance }) }))
+    .filter((entry) => entry.problem);
+  if (badBalances.length > 0) {
+    for (const entry of badBalances) {
+      console.error(`  INVALID: "${entry.b.name}" ${entry.b.monthKey} — ${entry.problem}`);
+    }
+    console.error("Nothing was written. Fix the file and run again.");
+    process.exit(1);
+  }
+
   if (funds.length === 0) {
     console.error("Nothing to import.");
+    process.exit(1);
+  }
+
+  // A sheet whose headers were all unreadable would otherwise write every
+  // fund with no history at all, and the script never deletes, so a corrected
+  // re-run would leave those empty funds behind.
+  if (balances.length === 0) {
+    console.error("No balances were read — check the month column headers.");
     process.exit(1);
   }
 
@@ -130,8 +153,15 @@ async function main() {
         idByName.set(fund.name, existing.rows[0].id);
         continue;
       }
+      // clock_timestamp(), not the column default. The default is
+      // CURRENT_TIMESTAMP, which in Postgres is the *transaction* start time,
+      // so every fund in this one transaction would land on the same instant
+      // — and the group order the dashboard shows is read off createdAt.
+      // clock_timestamp() advances within the transaction, so the rows keep
+      // the order the spreadsheet had.
       const created = await pool.query(
-        `INSERT INTO "SavingsFund" (id, name, "group") VALUES (gen_random_uuid()::text, $1, $2) RETURNING id`,
+        `INSERT INTO "SavingsFund" (id, name, "group", "createdAt")
+         VALUES (gen_random_uuid()::text, $1, $2, clock_timestamp()) RETURNING id`,
         [fund.name, fund.group],
       );
       idByName.set(fund.name, created.rows[0].id);

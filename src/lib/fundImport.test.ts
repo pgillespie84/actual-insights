@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { parseDelimited, parseMonthHeader, groupFromRow, isTotalRow, buildImport } from "./fundImport.cjs";
+import {
+  parseDelimited,
+  parseMonthHeader,
+  monthBeforeEarliest,
+  groupFromRow,
+  isTotalRow,
+  buildImport,
+} from "./fundImport.cjs";
 
 /** The household's sheet, trimmed to the rows that make the rules visible. */
 const SHEET = [
@@ -44,6 +51,21 @@ describe("parseMonthHeader", () => {
     expect(parseMonthHeader("Start of the Year")).toBeNull();
     expect(parseMonthHeader("Xyz-26")).toBeNull();
     expect(parseMonthHeader("13/2026")).toBeNull();
+  });
+});
+
+describe("monthBeforeEarliest", () => {
+  it("is the previous December for the household's January-to-December sheet", () => {
+    expect(monthBeforeEarliest(["2026-01", "2026-02", "2026-03"])).toBe("2025-12");
+  });
+
+  it("is the month before, not December, for any other starting month", () => {
+    expect(monthBeforeEarliest(["2026-07", "2026-08"])).toBe("2026-06");
+    expect(monthBeforeEarliest(["2025-12", "2026-01"])).toBe("2025-11");
+  });
+
+  it("has no answer when there are no months at all", () => {
+    expect(monthBeforeEarliest([])).toBeNull();
   });
 });
 
@@ -131,6 +153,31 @@ describe("buildImport", () => {
     const built = buildImport(sheet);
     expect(built.funds).toHaveLength(1);
     expect(built.warnings.join(" ")).toMatch(/more than once/);
+  });
+
+  it("warns and keeps one column when two headers are the same month", () => {
+    // Silently letting the later column win would change a figure with
+    // nothing said about it.
+    const sheet = ["Account,Jan-26,Jan-26", "Craft Fund,$10.00,$99.00"].join("\n");
+    const built = buildImport(sheet, { group: "Long Term" });
+    expect(built.balances).toEqual([
+      { name: "Craft Fund", monthKey: "2026-01", balance: 1000 },
+    ]);
+    expect(built.warnings.join(" ")).toMatch(/2026-01/);
+  });
+
+  it("files the opening balance against a sheet that does not start in January", () => {
+    // "December of the previous year" is only right for a January-to-December
+    // sheet. On one running Dec to Nov it would land a year early, and on the
+    // same month as a real column.
+    const sheet = ["Account,Start of the Year,Dec-25,Jan-26", "Craft Fund,$10.00,$99.00,$50.00"].join("\n");
+    const built = buildImport(sheet, { group: "Long Term" });
+    expect(built.balances).toContainEqual({
+      name: "Craft Fund",
+      monthKey: "2025-11",
+      balance: 1000,
+    });
+    expect(built.warnings).toEqual([]);
   });
 
   it("uses the --group fallback when the sheet has no group column", () => {

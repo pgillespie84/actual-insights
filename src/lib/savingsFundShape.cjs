@@ -53,24 +53,30 @@ function parseAmountToCents(input) {
   let text = input.trim();
   if (text === "") return null;
 
+  // The true minus sign (U+2212) appears in anything copied back off this
+  // dashboard, which formats negatives with it.
+  text = text.replace(/\u2212/g, "-");
+
+  // Symbol, separators and spaces come off first, before either sign is read.
+  // Doing it the other way round meant "$-40.00" still began with "$" when
+  // the minus was looked for, so it fell through as unreadable while
+  // "-$40.00" worked — a difference in where the household's spreadsheet puts
+  // the sign, and no difference in what it means.
+  text = text.replace(/[$,\s]/g, "");
+
   // Parentheses are how a spreadsheet writes a negative, and they survive a
-  // copy-paste. Handled before the strip so the sign is not lost with them.
+  // copy-paste.
   let negative = false;
   if (text.startsWith("(") && text.endsWith(")")) {
     negative = true;
-    text = text.slice(1, -1).trim();
+    text = text.slice(1, -1);
   }
-
-  // The true minus sign (U+2212) appears in anything copied back off this
-  // dashboard, which formats negatives with it.
-  text = text.replace(/−/g, "-");
 
   if (text.startsWith("-")) {
     negative = !negative;
-    text = text.slice(1).trim();
+    text = text.slice(1);
   }
 
-  text = text.replace(/[$,\s]/g, "");
   if (text === "" || !/^\d*\.?\d*$/.test(text) || text === ".") return null;
 
   const value = Number(text);

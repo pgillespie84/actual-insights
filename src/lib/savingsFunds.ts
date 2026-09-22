@@ -58,10 +58,17 @@ export interface FundGroup {
   carriedCount: number;
 }
 
-/** Every fund, oldest first. Creation order is what fixes the group order. */
+/**
+ * Every fund, oldest first. Creation order is what fixes the group order.
+ *
+ * `id` breaks a tie. Two funds created in the same instant is not a hypothetical
+ * — the import writes its whole sheet in one transaction — and without a
+ * tiebreaker the order among them is whatever the database happens to return,
+ * which can differ between page loads.
+ */
 export async function listFunds(): Promise<SavingsFundRecord[]> {
   const funds = await prisma.savingsFund.findMany({
-    orderBy: { createdAt: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
   return funds.map((f) => ({
     id: f.id,
@@ -124,7 +131,18 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
       })
       // Largest balance first, within the group. A fund with no figure at all
       // sorts last rather than as zero: it is unknown, not empty.
-      .sort((a, b) => (b.balance ?? -Infinity) - (a.balance ?? -Infinity));
+      //
+      // The null pair is branched on rather than folded into the subtraction.
+      // Two -Infinity sentinels subtract to NaN, and a comparator returning
+      // NaN leaves the order up to the engine — which is the ordinary case for
+      // any month at or before the first figure anyone recorded, when every
+      // fund resolves to null.
+      .sort((a, b) => {
+        if (a.balance === null && b.balance === null) return 0;
+        if (a.balance === null) return 1;
+        if (b.balance === null) return -1;
+        return b.balance - a.balance;
+      });
 
     return {
       group,
