@@ -72,15 +72,38 @@ export function SavingsFundsWidget({
                 </p>
               </div>
               <ul className={isPrint ? "mt-2" : "mt-2 space-y-1"}>
-                {group.funds.map((fund) => (
-                  <FundLine key={fund.id} fund={fund} monthKey={monthKey} />
-                ))}
+                {group.funds
+                  .filter((fund) => !fund.dormant)
+                  .map((fund) => (
+                    <FundLine key={fund.id} fund={fund} monthKey={monthKey} />
+                  ))}
               </ul>
+
+              <DormantNote funds={group.funds.filter((fund) => fund.dormant)} />
             </div>
           ))}
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * The funds left out, named.
+ *
+ * Named rather than counted, and shown rather than silently dropped: a row
+ * quietly disappearing from a financial page is how a group total stops
+ * matching what is above it. These hold nothing, so they change no figure —
+ * the line exists so the page never hides the existence of a fund, and so a
+ * fund set up and never funded is visible as exactly that.
+ */
+function DormantNote({ funds }: { funds: FundRow[] }) {
+  if (funds.length === 0) return null;
+
+  return (
+    <p className="mt-2 border-t border-card-border pt-2 text-[11px] leading-snug text-text-muted">
+      Empty for months, not listed: {funds.map((fund) => fund.name).join(", ")}
+    </p>
   );
 }
 

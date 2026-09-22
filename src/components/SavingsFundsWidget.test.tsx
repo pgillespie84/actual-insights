@@ -29,6 +29,7 @@ const groups: FundGroup[] = [
         carried: false,
         entered: true,
         change: 486056,
+        dormant: false,
         history: [387866, 873922],
       },
       {
@@ -43,6 +44,7 @@ const groups: FundGroup[] = [
         // Null, not 0: getFundGroups claims no change for a carried figure,
         // because both months resolve to the same old entry.
         change: null,
+        dormant: false,
         history: [309988, 309988],
       },
       {
@@ -55,6 +57,7 @@ const groups: FundGroup[] = [
         carried: false,
         entered: true,
         change: null,
+        dormant: false,
         history: [null, 5000],
       },
     ],
@@ -110,6 +113,7 @@ test("a month before anyone recorded anything says so rather than vanishing", ()
           carried: false,
           entered: false,
           change: null,
+          dormant: false,
           history: [null, null],
         },
       ],
@@ -118,6 +122,38 @@ test("a month before anyone recorded anything says so rather than vanishing", ()
   render(<SavingsFundsWidget groups={empty} monthKey="2025-01" />);
 
   expect(screen.getByText("No fund balances recorded for 2025-01.")).toBeInTheDocument();
+});
+
+test("a dormant fund is left out of the list but named underneath", () => {
+  // Silently dropping a row from a financial page is how a total stops
+  // matching what is above it, so the fund is named rather than just gone.
+  const withDormant: FundGroup[] = [
+    {
+      ...groups[0],
+      funds: [
+        ...groups[0].funds,
+        {
+          ...groups[0].funds[0],
+          id: "d",
+          name: "Car Replacement",
+          balance: 0,
+          change: null,
+          dormant: true,
+          history: [0, 0],
+        },
+      ],
+    },
+  ];
+  render(<SavingsFundsWidget groups={withDormant} monthKey="2026-09" />);
+
+  expect(screen.queryByText("Car Replacement")).not.toBeInTheDocument();
+  expect(screen.getByText(/Empty for months, not listed: Car Replacement/)).toBeInTheDocument();
+});
+
+test("no note appears when nothing is dormant", () => {
+  render(<SavingsFundsWidget groups={groups} monthKey="2026-09" />);
+
+  expect(screen.queryByText(/Empty for months/)).not.toBeInTheDocument();
 });
 
 test("nothing is rendered at all when no funds have been set up", () => {
