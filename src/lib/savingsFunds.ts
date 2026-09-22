@@ -135,8 +135,11 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
   const previous = getPreviousMonthKey(monthKey);
   const window: string[] = monthsEndingAt(monthKey, SPARKLINE_MONTHS);
   // The dormancy window is the tail of the sparkline's, so one resolution
-  // pass serves both.
-  const dormantFrom = window.length - DORMANT_MONTHS;
+  // pass serves both. Clamped because both lengths are exported constants: a
+  // sparkline shortened below the dormancy window would otherwise take
+  // slice() past the start, quietly deciding dormancy on fewer months than
+  // DORMANT_MONTHS claims.
+  const dormantFrom = Math.max(0, window.length - DORMANT_MONTHS);
 
   const [funds, balances] = await Promise.all([
     listFunds(),
@@ -175,15 +178,20 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
           // one figure in January and one in September draws eleven months of
           // line rather than two points pretending to be neighbours.
           history,
-          // A month with no record is not evidence of a balance, so it
-          // neither proves nor breaks dormancy — only a figure above or below
-          // zero does. A fund that has never been given a figure has a null
-          // balance rather than a zero one, so it is never dormant: it is
-          // waiting to be filled in, which is worth seeing.
+          // Every month in the window has to be a recorded zero, not merely
+          // "not a figure". Accepting nulls made the six months meaningless
+          // for a new fund: entering $0.00 for a fund created this month left
+          // five nulls and one zero, which counted as dormant, and the fund
+          // vanished from the dashboard the moment it was saved — which reads
+          // as the entry not having saved at all.
+          //
+          // A carried zero counts, since resolveBalance fills the window
+          // forward: a fund that went to zero in January is still recorded at
+          // zero in June.
           dormant:
             now !== null &&
             now.balance === 0 &&
-            history.slice(dormantFrom).every((value) => value === null || value === 0),
+            history.slice(dormantFrom).every((value) => value === 0),
           balance: now ? now.balance : null,
           asOf: now ? now.asOf : null,
           carried: now ? now.carried : false,

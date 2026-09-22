@@ -176,18 +176,22 @@ describe("buildImport", () => {
     // The trailing walk drops the empty copy and stops at the one with data.
     // Filtering by month would have taken both, losing the figures and still
     // printing the month as skipped.
-    const sheet = ["Account,Jan-26,Nov-26,Nov-26", "Craft Fund,$50.00,$0.00,$80.00"].join("\n");
+    // The column with figures comes FIRST and the empty one last, which is
+    // what makes this a test. The other way round, the backwards walk hits
+    // the figures immediately and stops, so nothing is dropped and the old
+    // by-month code passes too.
+    const sheet = ["Account,Jan-26,Nov-26,Nov-26", "Craft Fund,$50.00,$80.00,$0.00"].join("\n");
     const built = buildImport(sheet, { group: "Long Term" });
 
     expect(built.droppedMonths).toEqual([]);
-    // Which of the two columns wins is the duplicate rule's business, and it
-    // warns. What matters here is that the month is neither dropped nor
-    // reported as having no figures anywhere, when plainly one column has
-    // some.
-    expect(
-      built.balances.filter((b: { monthKey: string }) => b.monthKey === "2026-11"),
-    ).toHaveLength(1);
-    expect(built.warnings.join(" ")).toMatch(/2026-11/);
+    // And the figure survives. Dropping by month took the column holding it
+    // along with the empty one, losing $80 and still printing 2026-11 as a
+    // month with no figures anywhere.
+    expect(built.balances).toContainEqual({
+      name: "Craft Fund",
+      monthKey: "2026-11",
+      balance: 8000,
+    });
   });
 
   it("files the opening balance against a sheet that does not start in January", () => {

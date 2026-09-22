@@ -32,6 +32,7 @@ const FUNDS = [
   { id: "e", name: "Craft Fund", group: "Long Term", archivedFrom: null },
   { id: "f", name: "Holiday Fund", group: "Long Term", archivedFrom: null },
   { id: "g", name: "Unfunded Fund", group: "Long Term", archivedFrom: null },
+  { id: "h", name: "Brand New Fund", group: "Long Term", archivedFrom: null },
 ];
 
 const BALANCES = [
@@ -41,6 +42,9 @@ const BALANCES = [
   // Spent down to zero in August, which is recent enough to still matter.
   { fundId: "f", monthKey: "2026-07", balance: 40000 },
   { fundId: "f", monthKey: "2026-08", balance: 0 },
+  // Created this month, and its first entry is a zero — which is what a fund
+  // holding nothing yet honestly looks like.
+  { fundId: "h", monthKey: "2026-09", balance: 0 },
   { fundId: "a", monthKey: "2026-08", balance: 387866 },
   { fundId: "a", monthKey: "2026-09", balance: 873922 },
   { fundId: "b", monthKey: "2026-06", balance: 309988 },
@@ -80,6 +84,24 @@ test("a fund emptied long enough ago goes quiet", async () => {
   const holiday = longTerm.funds.find((f) => f.name === "Holiday Fund")!;
 
   expect(holiday.dormant).toBe(true);
+});
+
+test("a fund whose first entry is a zero stays listed, rather than vanishing as it is saved", async () => {
+  // Six months of nothing is the rule. One month of nothing is a fund that
+  // was just set up, and having it disappear the moment the figure is saved
+  // reads as the save having failed.
+  const [, longTerm] = await getFundGroups("2026-09");
+  const brandNew = longTerm.funds.find((f) => f.name === "Brand New Fund")!;
+
+  expect(brandNew.balance).toBe(0);
+  expect(brandNew.dormant).toBe(false);
+});
+
+test("that same fund goes quiet once it has held nothing for six months", async () => {
+  const [, longTerm] = await getFundGroups("2027-03");
+  const brandNew = longTerm.funds.find((f) => f.name === "Brand New Fund")!;
+
+  expect(brandNew.dormant).toBe(true);
 });
 
 test("a fund with no figure ever recorded is not dormant, it is unfilled", async () => {

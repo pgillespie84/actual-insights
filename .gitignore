@@ -51,6 +51,12 @@ next-env.d.ts
 # Never commit. config/dashboard.example.json is the tracked placeholder.
 config/dashboard.json
 
+# A savings fund export: every fund the household has, month by month, with
+# the balances. Same rule and the same reason as the config above, and it is
+# the obvious place to put the file before importing it.
+# config/funds.example.csv is the tracked format reference.
+config/funds.csv
+
 # Agent worktrees contain full builds with real config baked in
 .claude/worktrees/
 
