@@ -61,10 +61,12 @@ export interface FundGroup {
 /**
  * Every fund, oldest first. Creation order is what fixes the group order.
  *
- * `id` breaks a tie. Two funds created in the same instant is not a hypothetical
- * — the import writes its whole sheet in one transaction — and without a
- * tiebreaker the order among them is whatever the database happens to return,
- * which can differ between page loads.
+ * `id` breaks a tie, so the answer is at least the same answer twice. It is a
+ * backstop and not the mechanism: ids are random, so a tie resolves to an
+ * arbitrary order rather than the sheet's. What actually keeps the sheet's
+ * order is the import writing an explicit, increasing createdAt per row —
+ * see `scripts/import-fund-history.cjs`. A fund added from the admin page
+ * gets the column default and lands last, which is where a new fund belongs.
  */
 export async function listFunds(): Promise<SavingsFundRecord[]> {
   const funds = await prisma.savingsFund.findMany({
@@ -133,10 +135,12 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
       // sorts last rather than as zero: it is unknown, not empty.
       //
       // The null pair is branched on rather than folded into the subtraction.
-      // Two -Infinity sentinels subtract to NaN, and a comparator returning
-      // NaN leaves the order up to the engine — which is the ordinary case for
-      // any month at or before the first figure anyone recorded, when every
-      // fund resolves to null.
+      // Two -Infinity sentinels subtract to NaN, which the language forgives —
+      // it coerces a NaN comparison to "equal" and sort has been stable since
+      // ES2019, so the order held. It held by accident, through a rule nobody
+      // reading the line would think to check, in the ordinary case of any
+      // month at or before the first figure anyone recorded. Saying what
+      // should happen to two unknowns costs three lines.
       .sort((a, b) => {
         if (a.balance === null && b.balance === null) return 0;
         if (a.balance === null) return 1;

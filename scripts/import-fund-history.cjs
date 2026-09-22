@@ -17,10 +17,16 @@
  *   --dry-run        print what would be written and change nothing
  *   --group=<name>   the group for sheets with no Group or Mapping column
  *
- * Idempotent: funds are matched by name and balances upsert on
- * (fund, month), so re-running a corrected file fixes the figures rather than
- * duplicating them. It never deletes: a row that has dropped out of the sheet
- * stays in the database, because the sheet may simply have been trimmed.
+ * Idempotent, with one exception: funds are matched by name and balances
+ * upsert on (fund, month), so re-running a corrected file fixes the figures
+ * rather than duplicating them — but it does not fix the *order*. A fund that
+ * already exists keeps the createdAt it was first given, and that is what the
+ * dashboard reads group order off. Reordering the sheet and re-running will
+ * not reorder the dashboard; that needs the funds removing first, or a hand
+ * written UPDATE.
+ *
+ * It never deletes: a row that has dropped out of the sheet stays in the
+ * database, because the sheet may simply have been trimmed.
  */
 
 const fs = require("node:fs");
@@ -142,7 +148,25 @@ async function main() {
     await pool.query("BEGIN");
 
     const idByName = new Map();
-    for (const fund of funds) {
+
+    // The order the sheet had, written down rather than inferred from how
+    // fast the inserts happened.
+    //
+    // clock_timestamp() was the first attempt and is not enough: createdAt is
+    // TIMESTAMP(3), so its microseconds are stored to the nearest
+    // millisecond, and nineteen round trips to a database on the same host
+    // regularly finish several inside one. Tied rows fall through to the id,
+    // which is a random UUID — so the sheet's order would have held most of
+    // the time and silently inverted the rest, which is the worst of both.
+    //
+    // One base instant plus the row's index gives a strictly increasing
+    // sequence that does not depend on timing at all. It makes createdAt mean
+    // "imported, in this position" rather than a true wall-clock instant; the
+    // column is only ever read for ordering, and being right is worth more
+    // here than being precise to the millisecond.
+    const importedAt = Date.now();
+
+    for (const [index, fund] of funds.entries()) {
       // The group is deliberately not updated on an existing fund. Once the
       // household has moved a fund on the admin page, re-running the import
       // must not drag it back to wherever the spreadsheet still files it.
@@ -153,16 +177,14 @@ async function main() {
         idByName.set(fund.name, existing.rows[0].id);
         continue;
       }
-      // clock_timestamp(), not the column default. The default is
+      // createdAt is passed rather than defaulted. The column default is
       // CURRENT_TIMESTAMP, which in Postgres is the *transaction* start time,
       // so every fund in this one transaction would land on the same instant
-      // — and the group order the dashboard shows is read off createdAt.
-      // clock_timestamp() advances within the transaction, so the rows keep
-      // the order the spreadsheet had.
+      // — and the dashboard reads group order off createdAt. See importedAt.
       const created = await pool.query(
         `INSERT INTO "SavingsFund" (id, name, "group", "createdAt")
-         VALUES (gen_random_uuid()::text, $1, $2, clock_timestamp()) RETURNING id`,
-        [fund.name, fund.group],
+         VALUES (gen_random_uuid()::text, $1, $2, $3) RETURNING id`,
+        [fund.name, fund.group, new Date(importedAt + index).toISOString()],
       );
       idByName.set(fund.name, created.rows[0].id);
       createdFunds++;

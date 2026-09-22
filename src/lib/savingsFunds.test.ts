@@ -111,16 +111,18 @@ test("a past month never shows a later month's figures", async () => {
   expect(general.entered).toBe(true);
 });
 
-test("funds with no figure at all keep a defined order rather than an engine-defined one", async () => {
-  // Both balances null used to subtract two -Infinity sentinels to NaN, which
-  // leaves sort() free to return any order it likes.
+test("funds with no figure at all stay in the order the fund list gave them", async () => {
+  // Asserted as the order itself, not as "the same twice". A round trip
+  // comparing the call to itself passes for any comparator that is merely
+  // stable, which the old NaN-producing one was — so it would have proved
+  // nothing about the change that replaced it.
   const groups = await getFundGroups("2025-01");
-  const first = groups[0].funds.map((f) => f.name);
 
-  expect(await getFundGroups("2025-01").then((g) => g[0].funds.map((f) => f.name))).toEqual(
-    first,
-  );
-  expect(first).toHaveLength(3);
+  expect(groups[0].funds.map((f) => f.name)).toEqual([
+    "General Savings",
+    "Car Repair Fund",
+    "Daycare Tax Fund",
+  ]);
 });
 
 test("a month before any fund has history shows no figures rather than zeros", async () => {

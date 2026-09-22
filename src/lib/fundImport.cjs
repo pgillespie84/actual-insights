@@ -262,7 +262,10 @@ function buildImport(text, options = {}) {
       return cents !== null && cents !== 0;
     });
     if (hasFigure) break;
-    droppedMonths.push(col.monthKey);
+    // Guarded, because two columns carrying the same month both land here and
+    // the script prints this list for the reader to check. A month named
+    // twice invites them to wonder what they missed.
+    if (!droppedMonths.includes(col.monthKey)) droppedMonths.push(col.monthKey);
   }
   droppedMonths.reverse();
   const keptCols = ordered.filter((col) => !droppedMonths.includes(col.monthKey));
