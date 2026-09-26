@@ -1,5 +1,6 @@
 import { loadConfig } from "./loadConfig.cjs";
 import { resolveConfigSource } from "./configSource.cjs";
+import { syncedFundGroup } from "./fundsFromActual.cjs";
 
 export interface DashboardConfig {
   HOUSEHOLD_NAMES: string;
@@ -7,6 +8,7 @@ export interface DashboardConfig {
   SKIP_INCOME: string[];
   TOP_CATEGORY_EXCLUSIONS?: string[];
   SKIP_VENDOR_CATEGORIES?: string[];
+  SYNCED_FUND_GROUP?: string;
   BUDGET_BUCKETS: Record<string, string[]>;
   BUSINESS_CATEGORIES: string[];
   EXCLUDED_ACCOUNTS: string[];
@@ -105,6 +107,15 @@ export const SKIP_VENDOR_CATEGORIES: string[] = optionalNameList(
 export const TOP_CATEGORY_EXCLUSIONS: string[] = optionalNameList(
   config.TOP_CATEGORY_EXCLUSIONS,
 );
+
+/**
+ * The savings fund group whose figures the sync copies from Actual, or null.
+ *
+ * Optional and off when absent. Read here only so the admin grid can say
+ * which boxes the next sync will overwrite; the writing happens in the sync.
+ * See fundsFromActual.cjs.
+ */
+export const SYNCED_FUND_GROUP: string | null = syncedFundGroup(config);
 
 export const BUDGET_BUCKETS: Record<string, string[]> = config.BUDGET_BUCKETS;
 

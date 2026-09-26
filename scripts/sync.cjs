@@ -8,8 +8,10 @@ const { loadConfig } = require("../src/lib/loadConfig.cjs");
 const { insertRows } = require("../src/lib/batchInsert.cjs");
 const { formatBudgetMonthLines } = require("../src/lib/budgetSummary.cjs");
 const { getCurrentMonthKeyET } = require("../src/lib/timezone.cjs");
+const { syncedFundGroup, syncFundsFromActual } = require("../src/lib/fundsFromActual.cjs");
 
-const { SKIP_CATEGORIES, SKIP_INCOME } = loadConfig();
+const config = loadConfig();
+const { SKIP_CATEGORIES, SKIP_INCOME } = config;
 
 const skipNames = new Set([...SKIP_CATEGORIES, ...SKIP_INCOME]);
 
@@ -173,6 +175,20 @@ async function main() {
     );
 
     console.log(`\nSync complete! ${totalRecords} total records synced.`);
+
+    // Savings funds that mirror an Actual account (non-fatal). Runs after the
+    // snapshots above are written, so the current month's figure is today's.
+    // A failure here leaves those funds on their last figure, which the
+    // dashboard already marks as carried — not worth failing the sync over.
+    const fundGroup = syncedFundGroup(config);
+    if (fundGroup) {
+      console.log("\nFilling savings funds from Actual...");
+      try {
+        await syncFundsFromActual(pool, { group: fundGroup, currentMonth: getCurrentMonthKeyET() });
+      } catch (fundError) {
+        console.error("Filling savings funds failed (non-fatal):", fundError.message);
+      }
+    }
 
     // Generate AI insight (non-fatal)
     if (process.env.ANTHROPIC_API_KEY) {

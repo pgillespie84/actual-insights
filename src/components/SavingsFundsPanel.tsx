@@ -288,9 +288,11 @@ export function SavingsFundsPanel({ currentMonth }: { currentMonth: string }) {
 
       <div className="rounded-xl border border-card-border bg-card-bg p-5">
         <p className="max-w-2xl text-sm text-text-secondary">
-          Where each fund stood at the end of the month. Typed in by hand — nothing here
-          syncs from Actual, and no figure on this page changes the dashboard&rsquo;s
-          savings balance or net worth.
+          Where each fund stood at the end of the month.{" "}
+          {groups.some((g) => g.funds.some((f) => f.synced))
+            ? "Typed in by hand, except the funds marked “from Actual”, which every sync copies from the Actual account of the same name — a figure typed over one of those lasts until the next sync."
+            : "Typed in by hand — nothing here syncs from Actual."}{" "}
+          No figure on this page changes the dashboard&rsquo;s savings balance or net worth.
         </p>
         <p className="mt-2 max-w-2xl text-sm text-text-secondary">
           Boxes are pre-filled with whatever the dashboard is showing now, so you can see
@@ -496,11 +498,19 @@ function FundEntryRow({
       <div>
         <p className="text-sm text-text-primary">{fund.name}</p>
         <p className="text-xs text-text-secondary">
-          {fund.balance === null
-            ? "never recorded"
-            : fund.carried
-              ? `carried from ${shortMonth(fund.asOf as string)}`
-              : "entered for this month"}
+          {fund.synced
+            ? // Said instead of "entered", because the next sync replaces
+              // whatever is typed here with the account's balance.
+              fund.balance === null
+              ? "from Actual, not synced yet"
+              : fund.carried
+                ? `from Actual, as of ${shortMonth(fund.asOf as string)}`
+                : "from Actual, updated each sync"
+            : fund.balance === null
+              ? "never recorded"
+              : fund.carried
+                ? `carried from ${shortMonth(fund.asOf as string)}`
+                : "entered for this month"}
         </p>
       </div>
       <input
