@@ -14,6 +14,7 @@
   ],
   "SKIP_VENDOR_CATEGORIES": [],
   "TOP_CATEGORY_EXCLUSIONS": [],
+  "SYNCED_FUND_GROUP": "",
   "BUDGET_BUCKETS": {
     "Fixed": ["Housing", "Debts", "Insurance & Financials", "Utilities", "Subscriptions", "Tax"],
     "Flexible": ["Food", "Transportation", "Children", "Clothing", "Personal Care", "Medical/Health", "Pets"],

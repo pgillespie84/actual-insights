@@ -6,9 +6,9 @@
  * is pure and shared with the import script and the admin form. This file is
  * only the Prisma half.
  *
- * Every figure here was typed in by hand. Nothing in this file is derived
- * from Actual, feeds net worth, or is compared against a real account
- * balance.
+ * Figures are typed in by hand, except for the one group the sync fills from
+ * Actual account balances (`SYNCED_FUND_GROUP`, see `fundsFromActual.cjs`).
+ * Nothing here feeds net worth or is compared against a real account balance.
  */
 
 import { prisma } from "./prisma";
@@ -19,6 +19,7 @@ import {
   groupsInOrder,
 } from "./savingsFundShape.cjs";
 import { getPreviousMonthKey } from "./timezone";
+import { SYNCED_FUND_GROUP } from "./constants";
 
 /**
  * How many month-ends the dashboard's sparkline covers.
@@ -56,6 +57,11 @@ export interface FundRow extends SavingsFundRecord {
   carried: boolean;
   /** True when a row exists for this exact month — what the grid overwrites. */
   entered: boolean;
+  /**
+   * True when the sync fills this fund from the Actual account of the same
+   * name. A figure typed into the grid for it lasts only until the next sync.
+   */
+  synced: boolean;
   /**
    * Change against the previous month's figure, in cents, or null when there
    * is nothing to compare against.
@@ -196,6 +202,7 @@ export async function getFundGroups(monthKey: string): Promise<FundGroup[]> {
           asOf: now ? now.asOf : null,
           carried: now ? now.carried : false,
           entered: now ? now.asOf === monthKey : false,
+          synced: SYNCED_FUND_GROUP !== null && fund.group === SYNCED_FUND_GROUP,
           // No change is claimed for a carried figure. Both months resolve to
           // the same old entry, so the subtraction is a June figure minus
           // itself: it would render as "+$0" beside "as of Jun", which says

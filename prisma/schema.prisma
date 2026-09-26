@@ -98,10 +98,11 @@ model MonthNote {
 
 /// A savings fund: money the household has earmarked for one purpose.
 ///
-/// Funds live below accounts and Actual knows nothing about them, so every
-/// figure here is typed in by hand on the admin page. Nothing syncs, nothing
-/// reconciles against a real account balance, and no fund total feeds net
-/// worth or the Savings metric — this is a separate ledger the household
+/// Most funds live below accounts and Actual knows nothing about them, so
+/// their figures are typed in by hand on the admin page. The exception is the
+/// one group named by SYNCED_FUND_GROUP, which the sync copies from Actual
+/// accounts of the same name (src/lib/fundsFromActual.cjs). No fund total
+/// feeds net worth or the Savings metric — this is a separate ledger the household
 /// keeps, displayed beside the synced figures rather than mixed into them.
 ///
 /// `group` is the horizon the household thinks in ("Short Term", "Long

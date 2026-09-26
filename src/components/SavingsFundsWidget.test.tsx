@@ -30,6 +30,7 @@ const groups: FundGroup[] = [
         entered: true,
         change: 486056,
         dormant: false,
+        synced: false,
         history: [387866, 873922],
       },
       {
@@ -45,6 +46,7 @@ const groups: FundGroup[] = [
         // because both months resolve to the same old entry.
         change: null,
         dormant: false,
+        synced: false,
         history: [309988, 309988],
       },
       {
@@ -58,6 +60,7 @@ const groups: FundGroup[] = [
         entered: true,
         change: null,
         dormant: false,
+        synced: false,
         history: [null, 5000],
       },
     ],
@@ -114,6 +117,7 @@ test("a month before anyone recorded anything says so rather than vanishing", ()
           entered: false,
           change: null,
           dormant: false,
+          synced: false,
           history: [null, null],
         },
       ],
@@ -139,6 +143,7 @@ test("a dormant fund is left out of the list but named underneath", () => {
           balance: 0,
           change: null,
           dormant: true,
+          synced: false,
           history: [0, 0],
         },
       ],

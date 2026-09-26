@@ -39,7 +39,7 @@ const REQUIRED_KEYS = [
  * rather than a file in this repo — has to keep booting, so these cannot be
  * asserted as present.
  */
-const OPTIONAL_KEYS = ["SKIP_VENDOR_CATEGORIES"];
+const OPTIONAL_KEYS = ["SKIP_VENDOR_CATEGORIES", "SYNCED_FUND_GROUP"];
 
 const REQUIRED_NET_WORTH_GROUPS = [
   "Savings",
