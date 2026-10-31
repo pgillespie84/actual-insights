@@ -723,16 +723,17 @@ export async function getDebtMetric(monthKey: string): Promise<BalanceMetric> {
     monthKey,
   );
 
-  // Debt balances are negative (liabilities). A raw delta of +1000 means
-  // the balance went from e.g. -10000 to -9000, i.e. $1000 was paid down.
-  // We negate so that a positive result = debt paid down (good) and
-  // a negative result = new debt added (bad). The balance is reported as the
-  // amount owed, matching how getNetWorth sums totalDebt.
+  // Debt balances are negative (liabilities) and the delta is end minus start,
+  // so a raw delta of +1000 means the balance went from e.g. -10000 to -9000:
+  // $1000 paid down. That is already the sign the cards want (positive = paid
+  // down, negative = new debt), so the deltas pass through unchanged. The
+  // balance is reported as the amount owed, matching how getNetWorth sums
+  // totalDebt.
   return {
     ...rest,
     balance: balance === null ? null : Math.abs(balance),
-    monthDelta: monthDelta === null ? null : -monthDelta,
-    ytdDelta: ytdDelta === null ? null : -ytdDelta,
+    monthDelta,
+    ytdDelta,
   };
 }
 
