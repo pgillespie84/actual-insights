@@ -1,5 +1,6 @@
 import { prisma } from "./prisma";
 import { BUDGET_BUCKETS, BUSINESS_CATEGORIES, NET_WORTH_GROUPS, EXCLUDED_ACCOUNTS, SKIP_VENDOR_CATEGORIES, TOP_CATEGORY_EXCLUSIONS, getSavingsAccountNames, getPayableDebtAccountNames, getInvestmentAccountNames } from "./constants";
+import { toDebtMetric } from "./debtMetric";
 import { coversEveryName, getBalanceAt, getBalanceDelta } from "./accountSnapshots";
 import { startOfYear, parse } from "date-fns";
 import { getSpotlightCategories } from "./spotlightConfig";
@@ -718,22 +719,9 @@ export async function getSavingsMetric(monthKey: string): Promise<BalanceMetric>
 }
 
 export async function getDebtMetric(monthKey: string): Promise<BalanceMetric> {
-  const { balance, monthDelta, ytdDelta, ...rest } = await accountBalanceMetric(
-    getPayableDebtAccountNames(),
-    monthKey,
+  return toDebtMetric(
+    await accountBalanceMetric(getPayableDebtAccountNames(), monthKey),
   );
-
-  // Debt balances are negative (liabilities). A raw delta of +1000 means
-  // the balance went from e.g. -10000 to -9000, i.e. $1000 was paid down.
-  // We negate so that a positive result = debt paid down (good) and
-  // a negative result = new debt added (bad). The balance is reported as the
-  // amount owed, matching how getNetWorth sums totalDebt.
-  return {
-    ...rest,
-    balance: balance === null ? null : Math.abs(balance),
-    monthDelta: monthDelta === null ? null : -monthDelta,
-    ytdDelta: ytdDelta === null ? null : -ytdDelta,
-  };
 }
 
 /**
